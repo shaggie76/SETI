@@ -7,10 +7,32 @@ my $ROWS_PER_PAGE = 20;
 my $MAX_ROWS = 100;
 my $APP_ID = 29; # SETI@home v8
 
+my $MAX_HOSTS = 0xFFFFFFFF;
+
 print("Host, Device, Credit/Hour, Work Units\n");
+
+my @KEYS = ('cpu', 'gpu');
 
 foreach my $HOST_ID (@ARGV)
 {
+    if($HOST_ID eq "-gpu")
+    {
+        @KEYS = ('gpu');
+        next;
+    }
+
+    if($HOST_ID eq "-cpu")
+    {
+        @KEYS = ('cpu');
+        next;
+    }
+
+    if($HOST_ID =~ /-max=([0-9]*)/)
+    {
+        $MAX_HOSTS = int($1);
+        next;
+    }
+
     my %stats = (
         'gpu' => {'credit' => 0, 'runTime' => 0, 'n' => 0},
         'cpu' => {'credit' => 0, 'runTime' => 0, 'n' => 0}
@@ -52,6 +74,8 @@ foreach my $HOST_ID (@ARGV)
     $gpuModel =~ s/\bNVIDIA\b/ /i;
     $gpuModel =~ s/\([0-9]+MB\)//;
     $gpuModel =~ s/ driver: .*//;
+    $gpuModel =~ s/ OpenCL: .*//;
+    $gpuModel =~ s/\s+/ /g;
     $gpuModel =~ s/\s*$//;
     $gpuModel =~ s/^\s*//;
 
@@ -143,12 +167,14 @@ foreach my $HOST_ID (@ARGV)
 
         if($rows < $ROWS_PER_PAGE)
         {
-            print("Parsed $rows/$ROWS_PER_PAGE from HTML\n");
+            #print("Parsed $rows/$ROWS_PER_PAGE from HTML\n");
             last;
         }
     }
 
-    foreach my $key (sort keys(%stats))
+    my $haveStats = 0;
+
+    foreach my $key (@KEYS)
     {
         if($stats{$key}{'n'} <= 0)
         {
@@ -161,16 +187,33 @@ foreach my $HOST_ID (@ARGV)
         
         my $cph = (60 * 60 * $credit) / $runTime;
 
-        if($key eq 'cpu')
+        my $name = $key;
+
+        if($name eq 'cpu')
         {
             $cph *= $cpuCount;
-            $key = $cpuModel;
+            $name = $cpuModel;
         }
         elsif($key eq 'gpu')
         {
-            $key = $gpuModel;
+            $name = $gpuModel;
         }
-        print("$HOST_ID, $key, $cph, $n\n");
+        print("$HOST_ID, $name, $cph, $n\n");
+
+        if($stats{$key}{'n'} >= 25)
+        {
+            $haveStats = 1;
+        }
+    }
+
+    if($haveStats)
+    {
+        --$MAX_HOSTS;
+
+        if(!$MAX_HOSTS)
+        {
+            last;        
+        }
     }
 }
 

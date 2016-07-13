@@ -45,3 +45,10 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+Output/
+GPUs.csv
+
+# Local file from SETI db dump https://setiathome.berkeley.edu/stats
+host.gz
+
