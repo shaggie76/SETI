@@ -17,11 +17,6 @@ sub CheckHost($$$$)
 
     #print("$id,$total_credit,$rpc_time,$coprocs\n");
 
-    unless($coprocs =~ /CUDA/)
-    {
-        return;
-    }
-
     if($total_credit < $MIN_CREDITS)
     {
         return;
