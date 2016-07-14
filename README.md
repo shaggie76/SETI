@@ -1,4 +1,4 @@
-## Synopsis
+## aggregate.pl
 
 A script for aggregating credit/hour averages for SETI@home hosts with the 
 goal of estimating credit/watt.
@@ -10,25 +10,26 @@ default.
 It works by scrolling through 5 pages of verified results for a given
 host and works out the average credit to run-time ratio.
 
-## Example
+```aggregate.pl 8026559
+Host, Device, Credit/Hour, Work Units
+8026559, Core i7-5960X @ 3.00GHz, 751.646218607873, 47
+8026559, GeForce GTX 980 Ti, 680.596911595191, 53```
 
-aggregate.pl 8026559
+## scanHosts.pl
 
-cpu average 44.2880656913519 CR/h (52 results)
-gpu average 692.155971167249 CR/h (48 results)
+Takes a SETI@Home host dump and extracts a list of gpus by host-id that have
+been updated recently and have enough total credit.
 
-CPU results are per-thread so multiply your CR/hr by your active threads to
-get an approximate CR/h for the whole CPU. In this case the CPU is a 16-thread
-machine so it might be around 708.6 CR/hr if fully employed (I'm not sure 
-about how the GPU-reservation works though).
+```wget https://setiathome.berkeley.edu/stats/hosts.gz
+scanHosts.pl > GPUs.csv ```
 
-I don't have a multi-GPU setup but judging from other people's stats it looks
-like it issues one task spread across all GPUs.
+## aggregateGPUs.pl
 
-In the PC above it's about 250W for the CPU and 250W for the GPU (my UPS says
-it's drawing about 500W total and the TDP for the 980Ti should be 250W). This
-gives me the following estimates:
+Scans GPUs.csv for large enough groups of results for specific models and
+then grinds them through aggregate.pl and writes the results to Output dir
 
-CPU 708.6 CR/H / 250W = 2.83 CR/Wh
-GPU 692 CR/H / 250W = 2.77 CR/Wh
+## aggregateOutput.pl
 
+Analyzes the data in the output dir to take the highest results for each
+GPU to try to eliminate stats for people running multiple work-units at
+the same time. Generates a spreadsheet output.
