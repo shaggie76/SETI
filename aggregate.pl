@@ -75,6 +75,8 @@ foreach my $HOST_ID (@ARGV)
     $gpuModel =~ s/\([0-9]+MB\)//;
     $gpuModel =~ s/ driver: .*//;
     $gpuModel =~ s/ OpenCL: .*//;
+    $gpuModel =~ s/ \(\d+-bit\)//;
+    $gpuModel =~ s/ OEM//;
     $gpuModel =~ s/\s+/ /g;
     $gpuModel =~ s/\s*$//;
     $gpuModel =~ s/^\s*//;

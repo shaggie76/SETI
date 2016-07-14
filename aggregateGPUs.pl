@@ -34,6 +34,9 @@ while(<$fd>)
             next;
         }
 
+        $model =~ s/ \(\d+-bit\)//;
+        $model =~ s/ oem//;
+
         if(defined($gpuToIds{$model}))
         {
             push(@{$gpuToIds{$model}}, $hid);
@@ -53,7 +56,7 @@ foreach my $model (reverse sort keys %gpuToIds)
 {
     my @hids = @{$gpuToIds{$model}};
 
-    if(scalar(@hids) < $MIN_HIDS)
+    if(scalar(@hids) < $MAX_HIDS)
     {
         next;
     }
@@ -66,7 +69,7 @@ foreach my $model (reverse sort keys %gpuToIds)
 
     print("$model\n");
 
-    my $destFile = "Output/$model.txt";
+    my $destFile = "Output/$model.csv";
     my $destStat = stat($destFile);
 
     if(defined($destStat) && ($sourceStat->mtime <= $destStat->mtime))
@@ -77,6 +80,21 @@ foreach my $model (reverse sort keys %gpuToIds)
     my $max = $MIN_HIDS; # scan max but abort after min valid
     my $cmd = "aggregate.pl -gpu -max=$max" . join(" ", @hids);
 
-    system("$cmd | tee \"$destFile\"");
+    my @output;
+
+    open(my $fd, "$cmd |") or die;
+
+    while(<$fd>)
+    {
+        print($_);
+        push(@output, $_);
+    }
+
+    close($fd);
+   
+    open($fd, ">>$destFile") or die;
+    print($fd join('', @output));
+    close($fd);
+
     print("\n");
 }
