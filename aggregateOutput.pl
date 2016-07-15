@@ -44,6 +44,13 @@ foreach my $file (@files)
             next; # Omit multi-GPU
         }
 
+        # Clean up some stuff missed by scanHosts.pl 
+        $gpu =~ s/Intel Intel/Intel/i;
+        $gpu =~ s/AMD ATI\b/AMD/i;
+        $gpu =~ s/\(R\)//gi;
+        $gpu =~ s/\(TM\)//gi;
+        $gpu =~ s/\s\s/ /g;
+
         if
         (
             !defined($gpuToStats{$gpu}{$hid}) ||
