@@ -46,10 +46,9 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# Build output
-Output/
-GPUs.csv
-Results.csv
-
 # Local file from SETI db dump https://setiathome.berkeley.edu/stats
 host.gz
+
+# Output
+*.csv
+!HardwareStats.csv

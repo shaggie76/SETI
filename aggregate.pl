@@ -4,7 +4,7 @@ use warnings;
 use Scalar::Util qw(looks_like_number);
 
 my $ROWS_PER_PAGE = 20;
-my $MAX_ROWS = 100;
+my $MAX_ROWS = 200;
 my $APP_ID = 29; # SETI@home v8
 
 my $MAX_HOSTS = 0xFFFFFFFF;
@@ -70,21 +70,23 @@ foreach my $HOST_ID (@ARGV)
         die("Could not get host info from $url\n");
     }
 
+
     # NVIDIA GeForce GTX 750 Ti (2048MB) driver: 368.39 OpenCL: 1.2
-    $gpuModel =~ s/\bNVIDIA\b/ /i;
     $gpuModel =~ s/\([0-9]+MB\)//;
     $gpuModel =~ s/ driver: .*//;
     $gpuModel =~ s/ OpenCL: .*//;
-    $gpuModel =~ s/ \(\d+-bit\)//;
-    $gpuModel =~ s/ OEM//;
+
+    # Note: Copy/paste below and in scanHosts.pl
+    $gpuModel =~ s/\(R\)/ /g;
+    $gpuModel =~ s/\(TM\)/ /g;
     $gpuModel =~ s/\s+/ /g;
     $gpuModel =~ s/\s*$//;
     $gpuModel =~ s/^\s*//;
 
     # Intel(R) Xeon(R) CPU           W3550  @ 3.07GHz [Family 6 Model 26 Stepping 5]
     $cpuModel =~ s/\[Family.*//;
-    $cpuModel =~ s/\bIntel\b/ /;
     $cpuModel =~ s/ CPU / /;
+
     $cpuModel =~ s/\(R\)/ /g;
     $cpuModel =~ s/\(TM\)/ /g;
     $cpuModel =~ s/\s+/ /g;

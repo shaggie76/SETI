@@ -4,8 +4,8 @@ use warnings;
 use List::Util qw(shuffle);
 use File::stat;
 
-my $MIN_HIDS = 10;
-my $MAX_HIDS = 40;
+my $MIN_HIDS = 5;
+my $MAX_HIDS = 50;
 
 my %gpuToIds;
 
@@ -19,23 +19,46 @@ while(<$fd>)
         my $hid = $1;
         my $model = $2;
 
-        if($model =~ /[0-9][0-9][0-9]MX?\b/)
+        if(($model =~ /[0-9][0-9][0-9]MX?\b/) || ($model =~ /R9 M\d\d\d/))
         {
             next; # Skip mobile cards
         }
 
-        if(($model =~ /\bBOOST\b/) || ($model =~ /  /))
+        if
+        (
+            ($model =~ /\bOEM\b/) ||
+            ($model =~ /\bION\b/) ||
+            ($model =~ /\bBOOST\b/) ||
+            ($model =~ /Quadro/) ||
+            ($model =~ /Quadro/) ||
+            ($model =~ /\bNVS\b/) ||
+            ($model =~ s/ \(\d+-bit\)//) ||
+            ($model =~ /XT Prototype/i) ||
+            ($model =~ /unknown/i)
+        )
         {
             next; # Skip weird cards
         }
 
-        if(($model =~ /Quadro/) || ($model =~ /\bNVS\b/))
+        if((($model =~ /NVIDIA/i) || ($model =~ /GeForce/i)) && !($model =~ /\bGTX\b/i))
         {
-            next;
+            next; # Skip older generation Nvidia cards
         }
 
-        $model =~ s/ \(\d+-bit\)//;
-        $model =~ s/ oem//;
+        if($model =~ /GeForce [2-9]\d\d\d/i)
+        {
+            next; # Skip older generation Nvidia cards
+        }
+
+        if(($model =~ /INTEL.*HD Graphics/i) || ($model =~ /HD Graphics \d\d\d\d/i))
+        {
+            next; # Skip older generation Intel processors
+        }
+
+        if($model =~ /Radeon HD ?\d.\d\d/i)
+        {
+            next; # Skip older generation AMD processors
+        }
 
         if(defined($gpuToIds{$model}))
         {
@@ -56,7 +79,7 @@ foreach my $model (reverse sort keys %gpuToIds)
 {
     my @hids = @{$gpuToIds{$model}};
 
-    if(scalar(@hids) < $MAX_HIDS)
+    if(scalar(@hids) < $MIN_HIDS)
     {
         next;
     }

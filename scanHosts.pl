@@ -58,6 +58,13 @@ sub CheckHost($$$$)
 
     $coprocs = $cp[1];
 
+    # Note: copy/paste in aggregate.pl
+    $coprocs =~ s/\(R\)/ /g;
+    $coprocs =~ s/\(TM\)/ /g;
+    $coprocs =~ s/\s+/ /g;
+    $coprocs =~ s/\s*$//;
+    $coprocs =~ s/^\s*//;
+
     print("$id,$coprocs\n");
 }
 
