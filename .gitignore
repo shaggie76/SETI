@@ -52,3 +52,4 @@ host.gz
 # Output
 *.csv
 !HardwareStats.csv
+*.xlsx
