@@ -13,6 +13,9 @@ print("Host, Device, Credit/Hour, Work Units\n");
 
 my @KEYS = ('cpu', 'gpu');
 
+my $anon = 0;
+my $verbose = 0;
+
 foreach my $HOST_ID (@ARGV)
 {
     if($HOST_ID eq "-gpu")
@@ -24,6 +27,18 @@ foreach my $HOST_ID (@ARGV)
     if($HOST_ID eq "-cpu")
     {
         @KEYS = ('cpu');
+        next;
+    }
+
+    if($HOST_ID eq "-anon")
+    {
+        $anon = 1;
+        next;
+    }
+
+    if($HOST_ID eq "-v")
+    {
+        $verbose = 1;
         next;
     }
 
@@ -147,7 +162,11 @@ foreach my $HOST_ID (@ARGV)
 
                     if(looks_like_number($cpuTime) && looks_like_number($credit))
                     {
-                        unless($application =~ /Anonymous/)
+                        if
+                        (
+                            ($anon && ($application =~ /Anonymous/)) ||
+                            (!$anon && !($application =~ /Anonymous/))
+                        )
                         {
                             my $statsKey = ($application =~ /opencl/) ||
                                 ($application =~ /\bGPU\b/i) ? 'gpu' : 'cpu';
@@ -155,10 +174,14 @@ foreach my $HOST_ID (@ARGV)
                             $stats{$statsKey}{'credit'} += $credit;
                             $stats{$statsKey}{'runTime'} += $runTime;
                             $stats{$statsKey}{'n'} += 1;
+
+                            if($verbose)
+                            {
+                                my $cph = (60 * 60 * $credit) / $runTime;
+                                print("$id $cph CR/h $statsKey\n");
+                            }
                         }
 
-                        #my $cph = (60 * 60 * $credit) / $runTime;
-                        #print("$id $cph CR/h $statsKey\n");
                         ++$rows;
                     }
                     else
