@@ -26,6 +26,7 @@ while(<$fd>)
 
         if
         (
+            ($model =~ /\bv[1-9]$/i) ||
             ($model =~ /\bOEM\b/) ||
             ($model =~ /\bION\b/) ||
             ($model =~ /\bBOOST\b/) ||
@@ -100,7 +101,7 @@ foreach my $model (reverse sort keys %gpuToIds)
         next;
     }
 
-    my $max = $MIN_HIDS; # scan max but abort after min valid
+    my $max = $MAX_HIDS / 2; # If you scan half of them you can stop
     my $cmd = "aggregate.pl -gpu -max=$max" . join(" ", @hids);
 
     my @output;
