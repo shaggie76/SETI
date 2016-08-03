@@ -1,11 +1,13 @@
 use strict;
 use warnings;
 
-my $MIN_WORK_UNITS = 25;
+my $MIN_WORK_UNITS = 10;
 my $MIN_HOST_IDS = 10;
 
-my %gpuToStats; # gpu -> hid -> { h => ..., c => ... , w => ... }
+my %gpuToStats; # gpu -> hid -> api -> { h => ..., c => ... , w => ... }
 my %hardwareStats; # gpu -> { tdp => ..., gf => ... };
+
+my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA' );
 
 my $fd;
 open($fd, "HardwareStats.csv") or die;
@@ -47,7 +49,7 @@ foreach my $file (@files)
     {
         my @col = split(/, /, $_);
 
-        if(scalar(@col) != 4)
+        if(scalar(@col) != 7)
         {
             print("Parse error: $file $_\n");
             next;
@@ -59,9 +61,12 @@ foreach my $file (@files)
         }
 
         my $hid = int($col[0]);
-        my $gpu = $col[1];
-        my $crPerHr = 0+$col[2];
-        my $workUnits = int($col[3]);
+        my $api = $col[1];
+        my $gpu = $col[2];
+        my $credit = 0+$col[3];
+        my $seconds = 0+$col[4];
+        my $creditPerHour = 0+$col[5];
+        my $workUnits = int($col[6]);
 
         if($workUnits < $MIN_WORK_UNITS)
         {
@@ -82,119 +87,139 @@ foreach my $file (@files)
         $gpu =~ s/\(TM\)//gi;
         $gpu =~ s/\s\s/ /g;
 
+        if(defined($API_PRETTY{lc($api)}))
+        {
+            $api = $API_PRETTY{lc($api)};
+        }
+
         if
         (
-            !defined($gpuToStats{$gpu}{$hid}) ||
-            ($gpuToStats{$gpu}{$hid}{"c"} < $crPerHr)
+            !defined($gpuToStats{$api}{$gpu}{$hid}) ||
+            ($gpuToStats{$api}{$gpu}{$hid}{"w"} <= $workUnits)
         )
         {
-            $gpuToStats{$gpu}{$hid} = { h => $hid, c => $crPerHr, w => $workUnits };
+            $gpuToStats{$api}{$gpu}{$hid} =
+            {
+               h => $hid,
+               c => $credit,
+               s => $seconds,
+               cph => $creditPerHour,
+               w => $workUnits
+            };
         }
     }
 
     close($fd);
 }
 
+my %gpuToAvg;
+
 print("GPU,Avg Credit/Hour,StdDev\n");
-foreach my $gpu (sort(keys %gpuToStats))
+foreach my $api (sort(keys %gpuToStats))
 {
-    # Convert to array we can sort
-    my @results;
-
-    foreach my $hid (keys $gpuToStats{$gpu})
+    foreach my $gpu (sort(keys %{$gpuToStats{$api}}))
     {
-        push(@results, $gpuToStats{$gpu}{$hid});
+        # Convert to array we can sort
+        my @results;
+
+        foreach my $hid (keys $gpuToStats{$api}{$gpu})
+        {
+            push(@results, $gpuToStats{$api}{$gpu}{$hid});
+        }
+
+        my $n = scalar(@results);
+
+        if($n < $MIN_HOST_IDS)
+        {
+            next;
+        }
+
+        # Sort highest CPH results first
+        @results = sort { $b->{"cph"} <=> $a->{"cph"} } @results;
+
+        my $sum = 0;
+        my $sum2 = 0;
+
+        if($n > 2 * $MIN_HOST_IDS)
+        {
+            $n = int($n / 4); # Avg top quarter if we have a lot
+        }
+        else
+        {
+            $n = int($n / 2); # Only average top half
+        }
+
+        for(my $i = 0; $i < $n; ++$i)
+        {
+            my $c = $results[$i]->{"cph"};
+
+            $sum += $c;
+            $sum2 += $c * $c;
+        }
+
+        my $avg = $sum / $n;
+        my $stddev = sqrt(($sum2 / $n) - ($avg * $avg));
+
+        print("$gpu ($api),$avg,$stddev\n");
     }
-
-    my $n = scalar(@results);
-
-    if($n < $MIN_HOST_IDS)
-    {
-        next;
-    }
-
-    # Sort highest results first
-    @results = sort { $b->{"c"} <=> $a->{"c"} } @results;
-
-    my $sum = 0;
-    my $sum2 = 0;
-
-    if($n > 2 * $MIN_HOST_IDS)
-    {
-        $n = int($n / 4); # Avg top quarter if we have a lot
-    }
-    else
-    {
-        $n = int($n / 2); # Only average top half
-    }
-
-    for(my $i = 0; $i < $n; ++$i)
-    {
-        my $c = $results[$i]->{"c"};
-
-        $sum += $c;
-        $sum2 += $c * $c;
-    }
-
-    my $avg = $sum / $n;
-    my $stddev = sqrt(($sum2 / $n) - ($avg * $avg));
-
-    print("$gpu,$avg,$stddev\n");
 }
 
 print("\nGPU,Avg Credit/Watt-Hour,StdDev\n");
-foreach my $gpu (sort(keys %gpuToStats))
+foreach my $api (sort(keys %gpuToStats))
 {
-    # Convert to array we can sort
-    my @results;
-
-    foreach my $hid (keys $gpuToStats{$gpu})
+    foreach my $gpu (sort(keys %{$gpuToStats{$api}}))
     {
-        push(@results, $gpuToStats{$gpu}{$hid});
+        # Convert to array we can sort
+        my @results;
+
+        foreach my $hid (keys $gpuToStats{$api}{$gpu})
+        {
+            push(@results, $gpuToStats{$api}{$gpu}{$hid});
+        }
+
+        my $n = scalar(@results);
+
+        if($n < $MIN_HOST_IDS)
+        {
+            next;
+        }
+
+        unless(defined($hardwareStats{$gpu}))
+        {
+            print("$gpu not in hardware stats table\n");
+            next;
+        }
+
+        my $tdp = $hardwareStats{$gpu}{tdp};
+
+        # Sort highest CPH results first
+        @results = sort { $b->{"cph"} <=> $a->{"cph"} } @results;
+
+        my $sum = 0;
+        my $sum2 = 0;
+
+        if($n > 2 * $MIN_HOST_IDS)
+        {
+            $n = int($n / 4); # Avg top quarter if we have a lot
+        }
+        else
+        {
+            $n = int($n / 2); # Only average top half
+        }
+
+        for(my $i = 0; $i < $n; ++$i)
+        {
+            my $c = $results[$i]->{"cph"};
+
+            $c /= $tdp;
+
+            $sum += $c;
+            $sum2 += $c * $c;
+        }
+
+        my $avg = $sum / $n;
+        my $stddev = sqrt(($sum2 / $n) - ($avg * $avg));
+
+        print("$gpu ($api),$avg,$stddev\n");
     }
-
-    my $n = scalar(@results);
-
-    if($n < $MIN_HOST_IDS)
-    {
-        next;
-    }
-
-    unless(defined($hardwareStats{$gpu}))
-    {
-        print("$gpu not in hardware stats table\n");
-        next;
-    }
-
-    my $tdp = $hardwareStats{$gpu}{tdp};
-
-    # Sort highest results first
-    @results = sort { $b->{"c"} <=> $a->{"c"} } @results;
-
-    my $sum = 0;
-    my $sum2 = 0;
-
-    if($n > 2 * $MIN_HOST_IDS)
-    {
-        $n = int($n / 4); # Avg top quarter if we have a lot
-    }
-    else
-    {
-        $n = int($n / 2); # Only average top half
-    }
-
-    for(my $i = 0; $i < $n; ++$i)
-    {
-        my $c = $results[$i]->{"c"};
-
-        $c /= $tdp;
-
-        $sum += $c;
-        $sum2 += $c * $c;
-    }
-
-    my $avg = $sum / $n;
-    my $stddev = sqrt(($sum2 / $n) - ($avg * $avg));
-
-    print("$gpu,$avg,$stddev\n");
 }

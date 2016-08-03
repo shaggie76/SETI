@@ -9,10 +9,10 @@ my $APP_ID = 29; # SETI@home v8
 
 my $MAX_HOSTS = 0xFFFFFFFF;
 
-print("Host, Device, Credit/Hour, Work Units\n");
+print("Host, API, Device, Credit, Seconds, Credit/Hour, Work Units\n");
 
-my @KEYS = ('cpu', 'gpu');
-
+my $cpu = 1;
+my $gpu = 1;
 my $anon = 0;
 my $verbose = 0;
 
@@ -20,13 +20,13 @@ foreach my $HOST_ID (@ARGV)
 {
     if($HOST_ID eq "-gpu")
     {
-        @KEYS = ('gpu');
+        $cpu = 0;
         next;
     }
 
     if($HOST_ID eq "-cpu")
     {
-        @KEYS = ('cpu');
+        $gpu = 0;
         next;
     }
 
@@ -48,10 +48,7 @@ foreach my $HOST_ID (@ARGV)
         next;
     }
 
-    my %stats = (
-        'gpu' => {'credit' => 0, 'runTime' => 0, 'n' => 0},
-        'cpu' => {'credit' => 0, 'runTime' => 0, 'n' => 0}
-    );
+    my %stats;
 
     my $cpuCount;
     my $gpuModel;
@@ -84,7 +81,6 @@ foreach my $HOST_ID (@ARGV)
     {
         die("Could not get host info from $url\n");
     }
-
 
     # NVIDIA GeForce GTX 750 Ti (2048MB) driver: 368.39 OpenCL: 1.2
     $gpuModel =~ s/\([0-9]+MB\)//;
@@ -168,12 +164,34 @@ foreach my $HOST_ID (@ARGV)
                             (!$anon && !($application =~ /Anonymous/))
                         )
                         {
-                            my $statsKey = ($application =~ /opencl/) ||
-                                ($application =~ /\bGPU\b/i) ? 'gpu' : 'cpu';
-
-                            $stats{$statsKey}{'credit'} += $credit;
-                            $stats{$statsKey}{'runTime'} += $runTime;
-                            $stats{$statsKey}{'n'} += 1;
+                            my $statsKey = 'cpu';
+                            
+                            if($application =~ /\bopencl/i)
+                            {
+                                $statsKey = 'opencl';
+                            }
+                            elsif($application =~ /\bcuda/i)
+                            {
+                                $statsKey = 'cuda';
+                            }
+                            elsif($application =~ /\bgpu\b/i)
+                            {
+                                # Anon -- not defined
+                                $statsKey = 'gpu';
+                            }
+                            
+                            if(defined($stats{$statsKey}))
+                            {
+                                $stats{$statsKey}{'credit'} += $credit;
+                                $stats{$statsKey}{'runTime'} += $runTime;
+                                $stats{$statsKey}{'n'} += 1;
+                            }
+                            else
+                            {
+                                $stats{$statsKey}{'credit'} = $credit;
+                                $stats{$statsKey}{'runTime'} = $runTime;
+                                $stats{$statsKey}{'n'} = 1;
+                            }
 
                             if($verbose)
                             {
@@ -204,16 +222,31 @@ foreach my $HOST_ID (@ARGV)
 
     my $haveStats = 0;
 
-    foreach my $key (@KEYS)
+    foreach my $key (sort keys(%stats))
     {
         if($stats{$key}{'n'} <= 0)
         {
             next;
         }
+
+        if($key eq 'cpu')
+        {
+            unless($cpu)
+            {
+                next;
+            }
+        }
+        else
+        {
+            unless($gpu)
+            {
+                next;
+            }
+        }
        
         my $n = $stats{$key}{'n'};
         my $credit = $stats{$key}{'credit'};
-        my $runTime = $stats{$key}{'runTime'};
+        my $runTime = $stats{$key}{'runTime'}; # Seconds
         
         my $cph = (60 * 60 * $credit) / $runTime;
 
@@ -222,13 +255,14 @@ foreach my $HOST_ID (@ARGV)
         if($name eq 'cpu')
         {
             $cph *= $cpuCount;
+            $runTime /= $cpuCount;
             $name = $cpuModel;
         }
-        elsif($key eq 'gpu')
+        else
         {
             $name = $gpuModel;
         }
-        print("$HOST_ID, $name, $cph, $n\n");
+        print("$HOST_ID, $key, $name, $credit, $runTime, $cph, $n\n");
 
         if($stats{$key}{'n'} >= 25)
         {
