@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 
+use Date::Parse;
 use Scalar::Util qw(looks_like_number);
 
 my $ROWS_PER_PAGE = 20;
@@ -8,6 +9,8 @@ my $MAX_ROWS = 200;
 my $APP_ID = 29; # SETI@home v8
 
 my $MAX_HOSTS = 0xFFFFFFFF;
+
+my $INTERVAL_EPSILON = 5; # Seconds
 
 print("Host, API, Device, Credit, Seconds, Credit/Hour, Work Units\n");
 
@@ -151,12 +154,14 @@ foreach my $HOST_ID (@ARGV)
                     my $issued = $row[-7];
                     my $id = $row[-8];
 
+                    $reported = str2time($reported);
+
                     # looks_like_number doesn't enjoy digit-sep commas
                     $credit =~ s/,//g;
                     $cpuTime =~ s/,//g;
                     $runTime =~ s/,//g;
 
-                    if(looks_like_number($cpuTime) && looks_like_number($credit))
+                    if(defined($reported) && looks_like_number($cpuTime) && looks_like_number($credit))
                     {
                         if
                         (
@@ -179,7 +184,7 @@ foreach my $HOST_ID (@ARGV)
                                 # Anon -- not defined
                                 $statsKey = 'gpu';
                             }
-                            
+
                             if(defined($stats{$statsKey}))
                             {
                                 $stats{$statsKey}{'credit'} += $credit;
@@ -191,6 +196,16 @@ foreach my $HOST_ID (@ARGV)
                                 $stats{$statsKey}{'credit'} = $credit;
                                 $stats{$statsKey}{'runTime'} = $runTime;
                                 $stats{$statsKey}{'n'} = 1;
+                                @{$stats{$statsKey}{'intervals'}} = ();
+                            }
+
+                            my $begin = ($reported + $INTERVAL_EPSILON) - $runTime;
+                            my $end = $reported - $INTERVAL_EPSILON;
+
+                            if($begin < $end)
+                            {
+                                my $interval = { 'begin' => $begin , 'end' => $end, 'c' => 1 };
+                                push(@{$stats{$statsKey}{'intervals'}}, $interval);
                             }
 
                             if($verbose)
@@ -262,6 +277,31 @@ foreach my $HOST_ID (@ARGV)
         {
             $name = $gpuModel;
         }
+
+        my @intervals = sort { $a->{begin} <=> $b->{begin} } @{$stats{$key}{'intervals'}};
+
+        for(my $i = 0; $i < scalar(@intervals); ++$i)
+        {
+            my $a = $intervals[$i];
+
+            for(my $j = $i + 1; $j < scalar(@intervals); ++$j)
+            {
+                my $b = $intervals[$j];
+
+                if(($a->{begin} <= $b->{end}) && ($b->{begin} <= $a->{end}))
+                {
+                    ++$a->{c};
+                    ++$b->{c};
+                }
+                else
+                {
+                    last;
+                }
+            }
+
+            # print("$a->{begin} - $a->{end} [$a->{c}]\n");
+        }
+
         print("$HOST_ID, $key, $name, $credit, $runTime, $cph, $n\n");
 
         if($stats{$key}{'n'} >= 25)
