@@ -31,7 +31,7 @@ Takes a SETI@Home host dump and extracts the set of gpus by host-id that have
 been updated recently and have enough total credit. You'll need to get a copy of the hosts database first:
 
 ```
-wget https://setiathome.berkeley.edu/stats/hosts.gz  
+wget http://setiathome.berkeley.edu/stats/host.gz  
 scanHosts.pl > GPUs.csv
 ```
 

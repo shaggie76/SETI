@@ -7,7 +7,7 @@ use List::Util qw(shuffle);
 use File::stat;
 
 my $MIN_HIDS = 5;
-my $MAX_HIDS = 50;
+my $MAX_HIDS = 200;
 
 my %gpuToIds;
 
