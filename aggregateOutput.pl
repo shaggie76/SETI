@@ -86,6 +86,7 @@ foreach my $file (@files)
         $gpu =~ s/\(R\)//gi;
         $gpu =~ s/\(TM\)//gi;
         $gpu =~ s/\s\s/ /g;
+        $gpu =~ s/GeForce GTX 1060 6GB/GeForce GTX 1060/;
 
         if(defined($API_PRETTY{lc($api)}))
         {
