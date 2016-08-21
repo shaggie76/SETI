@@ -4,7 +4,7 @@ use warnings;
 use Scalar::Util qw(looks_like_number);
 
 my $ROWS_PER_PAGE = 20;
-my $MAX_ROWS = 200;
+my $MAX_ROWS = 2000;
 my $APP_ID = 29; # SETI@home v8
 
 my $MAX_HOSTS = 0xFFFFFFFF;

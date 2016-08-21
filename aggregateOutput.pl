@@ -1,13 +1,16 @@
 use strict;
 use warnings;
 
+use Sort::Naturally;
+
 my $MIN_WORK_UNITS = 10;
 my $MIN_HOST_IDS = 10;
 
-my %gpuToStats; # gpu -> hid -> api -> { h => ..., c => ... , w => ... }
+my %gpuToStats; # gpu -> api -> hid -> { h => ..., c => ... , w => ... }
 my %hardwareStats; # gpu -> { tdp => ..., gf => ... };
 
 my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA' );
+my @SORTED_APIS = reverse sort values(%API_PRETTY);
 
 my $fd;
 open($fd, "HardwareStats.csv") or die;
@@ -95,11 +98,11 @@ foreach my $file (@files)
 
         if
         (
-            !defined($gpuToStats{$api}{$gpu}{$hid}) ||
-            ($gpuToStats{$api}{$gpu}{$hid}{"w"} <= $workUnits)
+            !defined($gpuToStats{$gpu}{$api}{$hid}) ||
+            ($gpuToStats{$gpu}{$api}{$hid}{"w"} <= $workUnits)
         )
         {
-            $gpuToStats{$api}{$gpu}{$hid} =
+            $gpuToStats{$gpu}{$api}{$hid} =
             {
                h => $hid,
                c => $credit,
@@ -113,19 +116,49 @@ foreach my $file (@files)
     close($fd);
 }
 
+# Cull thing without enough hosts
+foreach my $gpu (nsort(keys %gpuToStats))
+{
+    foreach my $api (sort(keys %{$gpuToStats{$gpu}}))
+    {
+        if(scalar(keys $gpuToStats{$gpu}{$api}) < $MIN_HOST_IDS)
+        {
+            delete $gpuToStats{$gpu}{$api};
+        }
+    }
+
+    if(!scalar(keys $gpuToStats{$gpu}))
+    {
+        delete $gpuToStats{$gpu};
+    }
+}
+
 my %gpuToAvg;
 
-print("GPU,Avg Credit/Hour,StdDev\n");
-foreach my $api (sort(keys %gpuToStats))
+print("GPU");
+foreach my $api (@SORTED_APIS)
 {
-    foreach my $gpu (sort(keys %{$gpuToStats{$api}}))
+    print(",Avg Credit/Hour ($api),StdDev");
+}
+print("\n");
+
+foreach my $gpu (nsort(keys %gpuToStats))
+{
+    print("$gpu");
+    foreach my $api (@SORTED_APIS)
     {
+        unless(defined($gpuToStats{$gpu}{$api}))
+        {
+            print(",,");
+            next;
+        }
+        
         # Convert to array we can sort
         my @results;
 
-        foreach my $hid (keys $gpuToStats{$api}{$gpu})
+        foreach my $hid (keys $gpuToStats{$gpu}{$api})
         {
-            push(@results, $gpuToStats{$api}{$gpu}{$hid});
+            push(@results, $gpuToStats{$gpu}{$api}{$hid});
         }
 
         my $n = scalar(@results);
@@ -161,21 +194,36 @@ foreach my $api (sort(keys %gpuToStats))
         my $avg = $sum / $n;
         my $stddev = sqrt(($sum2 / $n) - ($avg * $avg));
 
-        print("$gpu ($api),$avg,$stddev\n");
+        print(",$avg,$stddev");
     }
+
+    print("\n");
 }
 
-print("\nGPU,Avg Credit/Watt-Hour,StdDev\n");
-foreach my $api (sort(keys %gpuToStats))
+print("\nGPU");
+foreach my $api (@SORTED_APIS)
 {
-    foreach my $gpu (sort(keys %{$gpuToStats{$api}}))
+    print(",Avg Credit/Watt-Hour ($api),StdDev");
+}
+print("\n");
+
+foreach my $gpu (nsort(keys %gpuToStats))
+{
+    print("$gpu");
+    foreach my $api (@SORTED_APIS)
     {
+        unless(defined($gpuToStats{$gpu}{$api}))
+        {
+            print(",,");
+            next;
+        }
+
         # Convert to array we can sort
         my @results;
 
-        foreach my $hid (keys $gpuToStats{$api}{$gpu})
+        foreach my $hid (keys $gpuToStats{$gpu}{$api})
         {
-            push(@results, $gpuToStats{$api}{$gpu}{$hid});
+            push(@results, $gpuToStats{$gpu}{$api}{$hid});
         }
 
         my $n = scalar(@results);
@@ -221,6 +269,7 @@ foreach my $api (sort(keys %gpuToStats))
         my $avg = $sum / $n;
         my $stddev = sqrt(($sum2 / $n) - ($avg * $avg));
 
-        print("$gpu ($api),$avg,$stddev\n");
+        print(",$avg,$stddev");
     }
+    print("\n");
 }
