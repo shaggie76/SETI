@@ -83,9 +83,12 @@ foreach my $HOST_ID (@ARGV)
     }
 
     # NVIDIA GeForce GTX 750 Ti (2048MB) driver: 368.39 OpenCL: 1.2
-    $gpuModel =~ s/\([0-9]+MB\)//;
-    $gpuModel =~ s/ driver: .*//;
-    $gpuModel =~ s/ OpenCL: .*//;
+    $gpuModel =~ s/ \([0-9]+MB\)//g;
+    $gpuModel =~ s/ driver: [0-9\.]*//g;
+    $gpuModel =~ s/ OpenCL: [0-9\.]*//g;
+
+    # Deal with Multi-GPU
+    $gpuModel =~ s/ *, */ & /g;
 
     # Note: Copy/paste below and in scanHosts.pl
     $gpuModel =~ s/\(R\)/ /g;

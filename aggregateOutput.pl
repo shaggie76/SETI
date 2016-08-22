@@ -76,7 +76,7 @@ foreach my $file (@files)
             next;
         }
 
-        if($gpu =~ /^\[\d\]/)
+        if(($gpu =~ /^\[\d\]/) && ($gpu =~ /\&/))
         {
             next; # Omit multi-GPU
         }
