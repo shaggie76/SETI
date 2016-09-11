@@ -108,7 +108,7 @@ while(<$fd>)
             next; # Skip embedded
         }
 
-        if($model =~ /Radeon HD ?\d.\d\d/i)
+        if(($model =~ /Radeon HD ?\d.\d\d/i) || ($model =~ /Mullins/i))
         {
             next; # Skip older generation AMD processors
         }
