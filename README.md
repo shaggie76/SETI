@@ -43,7 +43,7 @@ Note that if you re-run the aggregate without clearing the results folder first 
 
 ### aggregateOutput.pl
 
-When you have enough results for each card you use this script to combine and average them for each card. The mean is winsorized to to omit the bottom half or 3/4 of the host results -- the idea here is to try to ignore hosts that may be running multiple tasks concurrently (this will manifest as lower throughput per task).
+When you have enough results for each card you use this script to combine and them for each card. The data is scanned for the middle 60% of hosts, sorted by median, and emitted with min & range for easy floating bar graphing in Excel -- the idea here is to try to ignore hosts that may be running multiple tasks concurrently (this will manifest as lower throughput per task). Looking at scatter plots this seems to remove the outliers very well and still leave a very thick set of data that is evenly clustered between the bounds identified.
 
 The default is to print the CSV to shell so pipe it to a CSV of your choice:
 

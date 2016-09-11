@@ -9,7 +9,8 @@ my $MIN_HOST_IDS = 10;
 my %gpuToStats; # gpu -> api -> hid -> { h => ..., c => ... , w => ... }
 my %hardwareStats; # gpu -> { tdp => ..., gf => ... };
 
-my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA' );
+my %API_PRETTY = ( 'opencl' => 'OpenCL' );
+#my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA' );
 my @SORTED_APIS = reverse sort values(%API_PRETTY);
 
 my $fd;
@@ -95,6 +96,10 @@ foreach my $file (@files)
         {
             $api = $API_PRETTY{lc($api)};
         }
+        else
+        {
+            next;
+        }
 
         if
         (
@@ -133,23 +138,14 @@ foreach my $gpu (nsort(keys %gpuToStats))
     }
 }
 
-my %gpuToAvg;
+my %cphStats; # api->gpu->{ avg, stddev, values }
 
-print("GPU");
-foreach my $api (@SORTED_APIS)
+foreach my $gpu (keys %gpuToStats)
 {
-    print(",Avg Credit/Hour ($api),StdDev");
-}
-print("\n");
-
-foreach my $gpu (nsort(keys %gpuToStats))
-{
-    print("$gpu");
     foreach my $api (@SORTED_APIS)
     {
         unless(defined($gpuToStats{$gpu}{$api}))
         {
-            print(",,");
             next;
         }
         
@@ -168,108 +164,75 @@ foreach my $gpu (nsort(keys %gpuToStats))
             next;
         }
 
-        # Sort highest CPH results first
-        @results = sort { $b->{"cph"} <=> $a->{"cph"} } @results;
-
-        my $sum = 0;
-        my $sum2 = 0;
-
-        if($n > 2 * $MIN_HOST_IDS)
-        {
-            $n = int($n / 4); # Avg top quarter if we have a lot
-        }
-        else
-        {
-            $n = int($n / 2); # Only average top half
-        }
-
-        for(my $i = 0; $i < $n; ++$i)
-        {
-            my $c = $results[$i]->{"cph"};
-
-            $sum += $c;
-            $sum2 += $c * $c;
-        }
-
-        my $avg = $sum / $n;
-        my $stddev = sqrt(($sum2 / $n) - ($avg * $avg));
-
-        print(",$avg,$stddev");
-    }
-
-    print("\n");
-}
-
-print("\nGPU");
-foreach my $api (@SORTED_APIS)
-{
-    print(",Avg Credit/Watt-Hour ($api),StdDev");
-}
-print("\n");
-
-foreach my $gpu (nsort(keys %gpuToStats))
-{
-    print("$gpu");
-    foreach my $api (@SORTED_APIS)
-    {
-        unless(defined($gpuToStats{$gpu}{$api}))
-        {
-            print(",,");
-            next;
-        }
-
-        # Convert to array we can sort
-        my @results;
-
-        foreach my $hid (keys $gpuToStats{$gpu}{$api})
-        {
-            push(@results, $gpuToStats{$gpu}{$api}{$hid});
-        }
-
-        my $n = scalar(@results);
-
-        if($n < $MIN_HOST_IDS)
-        {
-            next;
-        }
-
-        unless(defined($hardwareStats{$gpu}))
-        {
-            print("$gpu not in hardware stats table\n");
-            next;
-        }
+        @results = sort { $a->{"cph"} <=> $b->{"cph"} } @results;
 
         my $tdp = $hardwareStats{$gpu}{tdp};
 
-        # Sort highest CPH results first
-        @results = sort { $b->{"cph"} <=> $a->{"cph"} } @results;
+        # Winsorize the middle 60% -- larger windows tend to include too many outliers
+        my $minIndex = int(($n * 0.2) + 0.5);
+        my $maxIndex = int(($n * 0.8) + 0.5);
+        my $minValue = $results[$minIndex]->{"cph"};
+        my $maxValue = $results[$maxIndex]->{"cph"};
+        my $median = $results[int(($n * 0.5) + 0.5)]->{"cph"};
+        my $medPwr = $median / $tdp;
 
-        my $sum = 0;
-        my $sum2 = 0;
-
-        if($n > 2 * $MIN_HOST_IDS)
-        {
-            $n = int($n / 4); # Avg top quarter if we have a lot
-        }
-        else
-        {
-            $n = int($n / 2); # Only average top half
-        }
-
-        for(my $i = 0; $i < $n; ++$i)
-        {
-            my $c = $results[$i]->{"cph"};
-
-            $c /= $tdp;
-
-            $sum += $c;
-            $sum2 += $c * $c;
-        }
-
-        my $avg = $sum / $n;
-        my $stddev = sqrt(($sum2 / $n) - ($avg * $avg));
-
-        print(",$avg,$stddev");
+        $cphStats{$api}{$gpu}{'min'} = $minValue;
+        $cphStats{$api}{$gpu}{'max'} = $maxValue;
+        $cphStats{$api}{$gpu}{'med'} = $median;
+        $cphStats{$api}{$gpu}{'medPwr'} = $medPwr;
+        $cphStats{$api}{$gpu}{'n'} = $maxIndex - $minIndex;
     }
+}
+
+foreach my $api (@SORTED_APIS)
+{
+    unless(defined($cphStats{$api}))
+    {
+        next;
+    }
+
+    print("Credit/Hour ($api)\n\n");
+
+    my @gpus = sort { $cphStats{$api}{$a}{'med'} <=> $cphStats{$api}{$b}{'med'} } keys($cphStats{$api});
+
+    print("GPU,Min CPH,CPH Spread,Hosts\n");
+
+    foreach my $gpu (@gpus)
+    {
+        my $minValue = $cphStats{$api}{$gpu}{'min'};
+        my $maxValue = $cphStats{$api}{$gpu}{'max'};
+        my $spread = $maxValue - $minValue;
+        my $n = $cphStats{$api}{$gpu}{'n'};
+        print("$gpu,$minValue,$spread,$n\n");
+    }
+
     print("\n");
 }
+
+foreach my $api (@SORTED_APIS)
+{
+    unless(defined($cphStats{$api}))
+    {
+        next;
+    }
+
+    print("Credit/Watt-Hour ($api)\n\n");
+
+    my @gpus = sort { $cphStats{$api}{$a}{'medPwr'} <=> $cphStats{$api}{$b}{'medPwr'} } keys($cphStats{$api});
+
+    print("GPU,Min CPH/WH,CPH/WH Spread\n");
+
+    foreach my $gpu (@gpus)
+    {
+        my $tdp = $hardwareStats{$gpu}{tdp};
+
+        my $minValue = $cphStats{$api}{$gpu}{'min'} / $tdp;
+        my $maxValue = $cphStats{$api}{$gpu}{'max'} / $tdp;
+        my $spread = $maxValue - $minValue;
+        my $n = $cphStats{$api}{$gpu}{'n'};
+        print("$gpu,$minValue,$spread,$n\n");
+    }
+
+    print("\n");
+}
+
