@@ -59,7 +59,7 @@ foreach my $HOST_ID (@ARGV)
     my $url = "http://setiathome.berkeley.edu/show_host_detail.php?hostid=$HOST_ID";
 
     my $curl;
-    open($curl, "curl --silent $url |") or die;
+    open($curl, "curl --silent \"$url\" |") or die;
 
     while(<$curl>)
     {
@@ -119,7 +119,7 @@ foreach my $HOST_ID (@ARGV)
         # print("$url\n");
 
         my $curl;
-        open($curl, "curl --silent $url |") or die;
+        open($curl, "curl --silent \"$url\" |") or die;
 
         my @row;
         my $rows = 0;

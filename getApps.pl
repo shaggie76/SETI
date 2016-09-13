@@ -14,7 +14,7 @@ sub CheckHost($)
     my $app = "stock";
 
     my $curl;
-    open($curl, "curl --silent $url 2>&1 |") or die;
+    open($curl, "curl --silent \"$url\" 2>&1 |") or die;
 
     while(<$curl>)
     {
