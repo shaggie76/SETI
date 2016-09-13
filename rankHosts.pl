@@ -1,3 +1,5 @@
+#!/usr/bin/perl
+
 # wget http://setiathome.berkeley.edu/stats/host.gz
 # then rankHosts.pl > topHosts.csv
 use strict;
