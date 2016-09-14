@@ -3,8 +3,6 @@
 use strict;
 use warnings;
 
-use Sort::Naturally;
-
 use List::Util qw(shuffle);
 use File::stat;
 
@@ -46,7 +44,7 @@ foreach my $file (@files)
 }
 
 open(my $fd, "GPUS.csv") or die;
-my $sourceStat = stat("GPUs.csv");
+my $sourceStat = stat("GPUS.csv");
 
 while(<$fd>)
 {
@@ -133,6 +131,17 @@ while(<$fd>)
 
 close($fd);
 
+sub nsort(@)
+{
+    my %data;
+    foreach my $data (@_)
+    {
+        (my $sort = $data) =~ s/(0*)(\d+)/pack("C",length($2)) . $1 . $2 /ge;
+        $data{$sort} = $data;
+    }
+    my @sorted = @data{sort keys %data};
+}
+
 mkdir("Output");
 
 foreach my $model (nsort keys %gpuToIds)
@@ -161,7 +170,7 @@ foreach my $model (nsort keys %gpuToIds)
     }
 
     my $max = $MAX_HIDS / 2; # If you scan half of them you can stop
-    my $cmd = "aggregate.pl -gpu -max=$max" . join(" ", @hids);
+    my $cmd = "./aggregate.pl -gpu -max=$max" . join(" ", @hids);
 
     my @output;
 

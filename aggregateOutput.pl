@@ -3,8 +3,6 @@
 use strict;
 use warnings;
 
-use Sort::Naturally;
-
 my $MIN_WORK_UNITS = 10;
 my $MIN_HOST_IDS = 10;
 
@@ -121,6 +119,17 @@ foreach my $file (@files)
     }
 
     close($fd);
+}
+
+sub nsort(@)
+{
+    my %data;
+    foreach my $data (@_)
+    {
+        (my $sort = $data) =~ s/(0*)(\d+)/pack("C",length($2)) . $1 . $2 /ge;
+        $data{$sort} = $data;
+    }
+    my @sorted = @data{sort keys %data};
 }
 
 # Cull thing without enough hosts
