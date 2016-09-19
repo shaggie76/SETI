@@ -6,12 +6,11 @@ use warnings;
 my $MIN_WORK_UNITS = 10;
 my $MIN_HOST_IDS = 10;
 
-my %gpuToStats; # gpu -> api -> hid -> { h => ..., c => ... , w => ... }
 my %hardwareStats; # gpu -> { tdp => ..., gf => ... };
 
-my %API_PRETTY = ( 'opencl' => 'OpenCL' );
-#my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA' );
-my @SORTED_APIS = reverse sort values(%API_PRETTY);
+my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA' );
+
+my @TELESCOPES = ( 'All', 'Arecibo', 'Greenbank' );
 
 my $fd;
 open($fd, "HardwareStats.csv") or die;
@@ -41,41 +40,39 @@ while(<$fd>)
 
 close($fd);
 
-my @files = sort(glob("Output/*.csv"));
+my %gpuToStats; # gpu -> api -> hostId -> resultId -> { csv fields }
 
-foreach my $file (@files)
+foreach my $file (sort(glob("Output/*.csv")))
 {
     my $fd;
-
     open($fd, $file) or die;
 
     while(<$fd>)
     {
         my @col = split(/, /, $_);
 
-        if(scalar(@col) != 7)
+        if(scalar(@col) != 9)
         {
-            print("Parse error: $file $_\n");
+            print("Parse error: $file $_");
             next;
         }
 
-        if($col[0] eq "Host")
+        if($col[0] eq "HostID")
         {
             next;
         }
 
-        my $hid = int($col[0]);
-        my $api = $col[1];
-        my $gpu = $col[2];
-        my $credit = 0+$col[3];
-        my $seconds = 0+$col[4];
-        my $creditPerHour = 0+$col[5];
-        my $workUnits = int($col[6]);
+        my $hostId = int($col[0]);
+        my $resultId = int($col[1]);
+        my $taskName = $col[2];
 
-        if($workUnits < $MIN_WORK_UNITS)
-        {
-            next;
-        }
+        my $gpu = $col[3];
+        my $api = $col[4];
+
+        my $credit = int($col[5]);
+        my $runTime = int($col[6]);
+        my $cpuTime = int($col[7]);
+        my $gpuConcurrency = int($col[8]);
 
         if(($gpu =~ /^\[\d\]/) && ($gpu =~ /\&/))
         {
@@ -101,149 +98,158 @@ foreach my $file (@files)
             next;
         }
 
-        if
-        (
-            !defined($gpuToStats{$gpu}{$api}{$hid}) ||
-            ($gpuToStats{$gpu}{$api}{$hid}{"w"} <= $workUnits)
-        )
+        my $cph = $gpuConcurrency * (60 * 60 * $credit) / $runTime;
+
+        # Note this nicely eliminates duplicate results
+        $gpuToStats{$gpu}{$api}{$hostId}{$resultId} =
         {
-            $gpuToStats{$gpu}{$api}{$hid} =
-            {
-               h => $hid,
-               c => $credit,
-               s => $seconds,
-               cph => $creditPerHour,
-               w => $workUnits
-            };
-        }
+            hostId => $hostId,
+            taskName => $taskName,
+            credit => $credit,
+            runTime => $runTime,
+            cpuTime => $cpuTime,
+            gpuConcurrency => $gpuConcurrency,
+            cph => $cph
+        };
     }
 
     close($fd);
 }
 
-sub nsort(@)
+foreach my $gpu (keys %gpuToStats)
 {
-    my %data;
-    foreach my $data (@_)
+    foreach my $api (keys %{$gpuToStats{$gpu}})
     {
-        (my $sort = $data) =~ s/(0*)(\d+)/pack("C",length($2)) . $1 . $2 /ge;
-        $data{$sort} = $data;
-    }
-    my @sorted = @data{sort keys %data};
-}
+        foreach my $hostId (keys %{$gpuToStats{$gpu}{$api}})
+        {
+            if(scalar(keys %{$gpuToStats{$gpu}{$api}{$hostId}}) < $MIN_WORK_UNITS)
+            {
+                delete $gpuToStats{$gpu}{$api}{$hostId};
+            }
+        }
 
-# Cull thing without enough hosts
-foreach my $gpu (nsort(keys %gpuToStats))
-{
-    foreach my $api (sort(keys %{$gpuToStats{$gpu}}))
-    {
-        if(scalar(keys $gpuToStats{$gpu}{$api}) < $MIN_HOST_IDS)
+        if(scalar(keys %{$gpuToStats{$gpu}{$api}}) < $MIN_HOST_IDS)
         {
             delete $gpuToStats{$gpu}{$api};
         }
     }
 
-    if(!scalar(keys $gpuToStats{$gpu}))
+    unless(keys %{$gpuToStats{$gpu}})
     {
         delete $gpuToStats{$gpu};
     }
 }
 
-my %cphStats; # api->gpu->{ avg, stddev, values }
+sub aggregateResults($@)
+{
+    my $tdp = shift;
+    my $n = scalar(@_);
+
+    unless($n)
+    {
+        return undef;
+    }
+
+    # Winsorize the middle 60% -- larger windows tend to include too many outliers
+    my $minIndex = int(($n * 0.2) + 0.5);
+    my $maxIndex = int(($n * 0.8) + 0.5);
+
+    my %hosts;
+
+    foreach (@_)
+    {
+        $hosts{$_->{'hostId'}} = 1;
+    }
+
+    return
+    {
+        'tasks' => $n,
+        'hosts' => scalar(keys(%hosts)),
+        'min' => $_[$minIndex]->{"cph"},
+        'max' => $_[$maxIndex]->{"cph"},
+        'median' => $_[int(($n * 0.5) + 0.5)]->{"cph"},
+        'cpwh' => $_[int(($n * 0.5) + 0.5)]->{"cph"} / $tdp
+    };
+}
+
+my %gpuToResults;
 
 foreach my $gpu (keys %gpuToStats)
 {
-    foreach my $api (@SORTED_APIS)
+    unless(defined($hardwareStats{$gpu}{'tdp'}))
     {
-        unless(defined($gpuToStats{$gpu}{$api}))
-        {
-            next;
-        }
-        
-        # Convert to array we can sort
-        my @results;
+        print("No TDP for $gpu\n");
+        next;
+    }
 
-        foreach my $hid (keys $gpuToStats{$gpu}{$api})
-        {
-            push(@results, $gpuToStats{$gpu}{$api}{$hid});
-        }
+    my $tdp = $hardwareStats{$gpu}{'tdp'};
 
-        my $n = scalar(@results);
+    my $bestAPI;
+    my $bestCPH = -1;
 
-        if($n < $MIN_HOST_IDS)
+    my %apiToResults; # api -> { all | greenbank | arecibo } => { median, min, max, crwh }
+
+    foreach my $api (keys %{$gpuToStats{$gpu}})
+    {
+        my @results = ();
+
+        foreach my $hostId (keys %{$gpuToStats{$gpu}{$api}})
         {
-            next;
+            push(@results, values(%{$gpuToStats{$gpu}{$api}{$hostId}}));
         }
 
         @results = sort { $a->{"cph"} <=> $b->{"cph"} } @results;
 
-        my $tdp = $hardwareStats{$gpu}{tdp};
+        $apiToResults{$api}{'All'} = aggregateResults($tdp, @results);
 
-        # Winsorize the middle 60% -- larger windows tend to include too many outliers
-        my $minIndex = int(($n * 0.2) + 0.5);
-        my $maxIndex = int(($n * 0.8) + 0.5);
-        my $minValue = $results[$minIndex]->{"cph"};
-        my $maxValue = $results[$maxIndex]->{"cph"};
-        my $median = $results[int(($n * 0.5) + 0.5)]->{"cph"};
-        my $medPwr = $median / $tdp;
+        if($apiToResults{$api}{'All'}{'median'} > $bestCPH)
+        {
+            $bestCPH = $apiToResults{$api}{'All'}{'median'};
+            $bestAPI = $api;
+        }
+        
+        # Arecibo: 17my10ab.26379.19699.15.42.58.vlar_2 
+        # Greenbank: blc2_2bit_guppi_57403_68833_HIP11048_OFF_0003.27930.831.21.44.85.vlar_1
+        my @arecibo = ();
+        my @greenbank = ();
 
-        $cphStats{$api}{$gpu}{'min'} = $minValue;
-        $cphStats{$api}{$gpu}{'max'} = $maxValue;
-        $cphStats{$api}{$gpu}{'med'} = $median;
-        $cphStats{$api}{$gpu}{'medPwr'} = $medPwr;
-        $cphStats{$api}{$gpu}{'n'} = $maxIndex - $minIndex;
+        foreach (@results)
+        {
+            if($_->{'taskName'} =~ /^blc/i)
+            {
+                push(@greenbank, $_);
+            }
+            else
+            {
+                push(@arecibo, $_);
+            }
+        }
+
+        $apiToResults{$api}{'Greenbank'} = aggregateResults($tdp, @greenbank);
+        $apiToResults{$api}{'Arecibo'} = aggregateResults($tdp, @arecibo);
     }
+
+    $gpuToResults{"$gpu ($bestAPI)"} = $apiToResults{$bestAPI};
 }
 
-foreach my $api (@SORTED_APIS)
+my @sortedGPUs = sort { $gpuToResults{$a}{'All'}{'median'} <=> $gpuToResults{$b}{'All'}{'median'} } keys(%gpuToResults);
+
+my @CSV_FIELDS = ( 'hosts', 'tasks', 'median', 'cpwh', 'max', 'min' );
+
+foreach my $telescope (@TELESCOPES)
 {
-    unless(defined($cphStats{$api}))
+    print("GPU ($telescope), Hosts, Tasks, Median, CPWH, Max, Min\n");
+
+    foreach my $gpu (@sortedGPUs)
     {
-        next;
-    }
+        print("$gpu, ");
 
-    print("Credit/Hour ($api)\n\n");
+        my $results = $gpuToResults{$gpu}{$telescope};
+        my @fields = @{$results}{@CSV_FIELDS};
 
-    my @gpus = sort { $cphStats{$api}{$a}{'med'} <=> $cphStats{$api}{$b}{'med'} } keys($cphStats{$api});
-
-    print("GPU,Min CPH,CPH Spread,Hosts\n");
-
-    foreach my $gpu (@gpus)
-    {
-        my $minValue = $cphStats{$api}{$gpu}{'min'};
-        my $maxValue = $cphStats{$api}{$gpu}{'max'};
-        my $spread = $maxValue - $minValue;
-        my $n = $cphStats{$api}{$gpu}{'n'};
-        print("$gpu,$minValue,$spread,$n\n");
+        print(join(", ", @fields));
+        print("\n");
     }
 
     print("\n");
 }
-
-foreach my $api (@SORTED_APIS)
-{
-    unless(defined($cphStats{$api}))
-    {
-        next;
-    }
-
-    print("Credit/Watt-Hour ($api)\n\n");
-
-    my @gpus = sort { $cphStats{$api}{$a}{'medPwr'} <=> $cphStats{$api}{$b}{'medPwr'} } keys($cphStats{$api});
-
-    print("GPU,Min CPH/WH,CPH/WH Spread\n");
-
-    foreach my $gpu (@gpus)
-    {
-        my $tdp = $hardwareStats{$gpu}{tdp};
-
-        my $minValue = $cphStats{$api}{$gpu}{'min'} / $tdp;
-        my $maxValue = $cphStats{$api}{$gpu}{'max'} / $tdp;
-        my $spread = $maxValue - $minValue;
-        my $n = $cphStats{$api}{$gpu}{'n'};
-        print("$gpu,$minValue,$spread,$n\n");
-    }
-
-    print("\n");
-}
-

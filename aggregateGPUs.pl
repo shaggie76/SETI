@@ -5,8 +5,9 @@ use warnings;
 
 use List::Util qw(shuffle);
 use File::stat;
+use Cwd;
 
-my $MIN_HIDS = 5;
+my $MIN_HIDS = 10;
 my $MAX_HIDS = 200;
 
 my %gpuToIds;
@@ -25,13 +26,13 @@ foreach my $file (@files)
     {
         my @col = split(/, /, $_);
 
-        if(scalar(@col) != 7)
+        if(scalar(@col) != 9)
         {
             print("Parse error: $file $_\n");
             next;
         }
 
-        if($col[0] eq "Host")
+        if($col[0] eq "HostID")
         {
             next;
         }
@@ -43,8 +44,8 @@ foreach my $file (@files)
     close($fd);
 }
 
-open(my $fd, "GPUS.csv") or die;
-my $sourceStat = stat("GPUS.csv");
+open(my $fd, "GPUs.csv") or die;
+my $sourceStat = stat("GPUs.csv");
 
 while(<$fd>)
 {
@@ -93,11 +94,6 @@ while(<$fd>)
             next; # Skip older generation Nvidia cards
         }
 
-        #if(($model =~ /INTEL.*HD Graphics/i) || ($model =~ /HD Graphics \d\d\d\d/i))
-        #{
-        #    next; # Skip older generation Intel processors
-        #}
-
         if
         (
             ($model =~ /\bIntel\b/i) ||
@@ -144,6 +140,8 @@ sub nsort(@)
 
 mkdir("Output");
 
+my $cwd = getcwd();
+
 foreach my $model (nsort keys %gpuToIds)
 {
     my @hids = @{$gpuToIds{$model}};
@@ -169,8 +167,14 @@ foreach my $model (nsort keys %gpuToIds)
         next;
     }
 
-    my $max = $MAX_HIDS / 2; # If you scan half of them you can stop
-    my $cmd = "./aggregate.pl -gpu -max=$max" . join(" ", @hids);
+    my $max = int(scalar(@hids) / 2);
+
+    if($max < $MIN_HIDS)
+    {
+        $max = $MIN_HIDS;
+    }
+
+    my $cmd = "$cwd/aggregate.pl -csv -gpu -max=$max" . join(" ", @hids);
 
     my @output;
 

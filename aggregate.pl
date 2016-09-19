@@ -11,52 +11,70 @@ my $APP_ID = 29; # SETI@home v8
 
 my $MAX_HOSTS = 0xFFFFFFFF;
 
-print("Host, API, Device, Credit, Seconds, Credit/Hour, Work Units\n");
-
 my $cpu = 1;
 my $gpu = 1;
 my $anon = 0;
-my $verbose = 0;
+my $csv = 0;
 
-foreach my $HOST_ID (@ARGV)
+my @hostIds = ();
+
+my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA', 'gpu' => 'Anonymous' );
+
+foreach my $arg (@ARGV)
 {
-    if($HOST_ID eq "-gpu")
+    if($arg eq "-gpu")
     {
         $cpu = 0;
         next;
     }
 
-    if($HOST_ID eq "-cpu")
+    if($arg eq "-cpu")
     {
         $gpu = 0;
         next;
     }
 
-    if($HOST_ID eq "-anon")
+    if($arg eq "-anon")
     {
         $anon = 1;
         next;
     }
 
-    if($HOST_ID eq "-v")
+    if($arg eq "-csv")
     {
-        $verbose = 1;
+        $csv = 1;
         next;
     }
 
-    if($HOST_ID =~ /-max=([0-9]*)/)
+    if($arg =~ /-max=([0-9]*)/)
     {
         $MAX_HOSTS = int($1);
         next;
     }
 
+    if($arg =~ /^\d+$/)
+    {
+        push(@hostIds, $arg);
+        next;
+    }
+
+    die("Bad arg: $arg\n");
+}
+
+if($csv)
+{
+    print("HostID, ResultID, TaskName, Device, API, Credit, Run-Time, CPU-Time, GPU-Concurrency\n");
+}
+
+foreach my $hostId (@hostIds)
+{
     my %stats;
 
     my $cpuCount;
     my $gpuModel;
     my $cpuModel;
 
-    my $url = "http://setiathome.berkeley.edu/show_host_detail.php?hostid=$HOST_ID";
+    my $url = "http://setiathome.berkeley.edu/show_host_detail.php?hostid=$hostId";
 
     my $curl;
     open($curl, "curl --silent \"$url\" |") or die;
@@ -99,6 +117,15 @@ foreach my $HOST_ID (@ARGV)
     $gpuModel =~ s/\s*$//;
     $gpuModel =~ s/^\s*//;
 
+    my $deviceString = $gpuModel;
+    my $gpuCount = 1 + ($deviceString =~ tr/&//);
+
+    while($deviceString =~ /\[(\d+)\] /)
+    {
+        $gpuCount += ($1 - 1);
+        $deviceString =~ s/\[\d+\] //;
+    }
+
     # Intel(R) Xeon(R) CPU           W3550  @ 3.07GHz [Family 6 Model 26 Stepping 5]
     $cpuModel =~ s/\[Family.*//;
     $cpuModel =~ s/ CPU / /;
@@ -109,32 +136,38 @@ foreach my $HOST_ID (@ARGV)
     $cpuModel =~ s/\s*$//;
     $cpuModel =~ s/^\s*//;
 
-    my $BASE_URL = "http://setiathome.berkeley.edu/results.php";
+    my $gpuConcurrency = -1;
+
+    my $BASE_URL = "http://setiathome.berkeley.edu";
 
     for(my $offset = 0; $offset < $MAX_ROWS; $offset += $ROWS_PER_PAGE)
     {
-        #By UID $BASE_URL?userid=$USER_ID&offset=$offset&show_names=0&state=4&appid=$APP_ID
-        my $url = "$BASE_URL?hostid=$HOST_ID&offset=$offset&show_names=0&state=4&appid=$APP_ID";
-
-        # print("$url\n");
+        my $url = "$BASE_URL/results.php?hostid=$hostId&offset=$offset&show_names=0&state=4&appid=$APP_ID&show_names=1";
 
         my $curl;
         open($curl, "curl --silent \"$url\" |") or die;
+        my @taskPage = <$curl>;
+        close($curl);
 
         my @row;
         my $rows = 0;
 
-        while(<$curl>)
+        foreach (@taskPage)
         {
             if(/\<tr\>/)
             {
                 @row = ();
             }
-        
-            if
+
+            # <a href="result.php?resultid=5148890877">03no09ac.7184.21749.12.39.73_1</a></td>
+
+            if(/result\.php\?resultid=(\d+)\"\>([^<]+)/)
+            {
+                push(@row, $1, $2);
+            }
+            elsif
             (
-                /result\.php\?(resultid=\d+)/ ||
-                /workunit\.php\?(wuid=\d+)/ ||
+                /workunit\.php\?wuid=(\d+)/ ||
                 /\<td[^\>]*\>(.*)\<\/td\>/ 
             )
             {
@@ -143,7 +176,7 @@ foreach my $HOST_ID (@ARGV)
 
             if(/\<\/tr\>/)
             {
-                if(scalar(@row) >= 8)
+                if(scalar(@row) >= 9)
                 {
                     # Look at last n columns to ignore differences in schema
                     # for by-host/by-user
@@ -154,54 +187,97 @@ foreach my $HOST_ID (@ARGV)
                     my $status = $row[-5];
                     my $reported = $row[-6];
                     my $issued = $row[-7];
-                    my $id = $row[-8];
+                    my $wuId = $row[-8];
+                    my $taskName = $row[-9];
+                    my $resultId = $row[-10];
 
                     # looks_like_number doesn't enjoy digit-sep commas
                     $credit =~ s/,//g;
                     $cpuTime =~ s/,//g;
                     $runTime =~ s/,//g;
 
-                    if(looks_like_number($cpuTime) && looks_like_number($credit))
+                    if(looks_like_number($runTime) && looks_like_number($credit))
                     {
+                        my $statsKey = 'cpu';
+                        
+                        if($application =~ /\bopencl/i)
+                        {
+                            $statsKey = 'opencl';
+                        }
+                        elsif($application =~ /\bcuda/i)
+                        {
+                            $statsKey = 'cuda';
+                        }
+                        elsif($application =~ /\bgpu\b/i)
+                        {
+                            # Anon -- not defined
+                            $statsKey = 'gpu';
+                        }
+                        
+                        if(defined($stats{$statsKey}))
+                        {
+                            $stats{$statsKey}{'credit'} += $credit;
+                            $stats{$statsKey}{'runTime'} += $runTime;
+                            $stats{$statsKey}{'cpuTime'} += $cpuTime;
+                            $stats{$statsKey}{'n'} += 1;
+                        }
+                        else
+                        {
+                            $stats{$statsKey}{'credit'} = $credit;
+                            $stats{$statsKey}{'runTime'} = $runTime;
+                            $stats{$statsKey}{'cpuTime'} = $cpuTime;
+                            $stats{$statsKey}{'n'} = 1;
+                        }
+
+                        if(!($statsKey eq 'cpu') && ($gpuConcurrency < 0))
+                        {
+                            $url = "$BASE_URL/result.php?resultid=$resultId";
+
+                            open($curl, "curl --silent \"$url\" |") or die;
+                            my @resultPage = <$curl>;
+                            close($curl);
+
+                            $gpuConcurrency = 1;
+
+                            # TODO: can also check for 
+                            # "total_GPU_instances_num set to 5"
+                            # and count devices?
+
+                            # TODO: get GPU models from this query instead; would be more accurate
+
+                            # TODO; could, if we cared, get app version
+
+                            foreach (@resultPage)
+                            {
+                                if(/Number of app instances per device set to:\s*(\d+)/)
+                                {
+                                    $gpuConcurrency = $1;
+                                    last;
+                                }
+                            }
+                        }
+
                         if
                         (
-                            ($anon && ($application =~ /Anonymous/)) ||
-                            (!$anon && !($application =~ /Anonymous/))
+                            $csv &&
+                            (($statsKey eq 'cpu') ? $cpu : $gpu) &&
+                            (
+                                ($anon && ($application =~ /Anonymous/)) ||
+                                (!$anon && !($application =~ /Anonymous/))
+                            )
                         )
                         {
-                            my $statsKey = 'cpu';
-                            
-                            if($application =~ /\bopencl/i)
+                            if($statsKey eq 'cpu')
                             {
-                                $statsKey = 'opencl';
-                            }
-                            elsif($application =~ /\bcuda/i)
-                            {
-                                $statsKey = 'cuda';
-                            }
-                            elsif($application =~ /\bgpu\b/i)
-                            {
-                                # Anon -- not defined
-                                $statsKey = 'gpu';
-                            }
-                            
-                            if(defined($stats{$statsKey}))
-                            {
-                                $stats{$statsKey}{'credit'} += $credit;
-                                $stats{$statsKey}{'runTime'} += $runTime;
-                                $stats{$statsKey}{'n'} += 1;
+                                my $device = $cpuModel;
+                                my $api = 'cpu';
+                                print("$hostId, $resultId, $taskName, $device, $api, $credit, $runTime\n");
                             }
                             else
                             {
-                                $stats{$statsKey}{'credit'} = $credit;
-                                $stats{$statsKey}{'runTime'} = $runTime;
-                                $stats{$statsKey}{'n'} = 1;
-                            }
-
-                            if($verbose)
-                            {
-                                my $cph = (60 * 60 * $credit) / $runTime;
-                                print("$id $cph CR/h $statsKey\n");
+                                my $device = $gpuModel;
+                                my $api = $statsKey;
+                                print("$hostId, $resultId, $taskName, $device, $api, $credit, $runTime, $cpuTime, $gpuConcurrency\n");
                             }
                         }
 
@@ -216,8 +292,6 @@ foreach my $HOST_ID (@ARGV)
             }
         }
 
-        close($curl);
-
         if($rows < $ROWS_PER_PAGE)
         {
             #print("Parsed $rows/$ROWS_PER_PAGE from HTML\n");
@@ -225,64 +299,116 @@ foreach my $HOST_ID (@ARGV)
         }
     }
 
-    my $haveStats = 0;
-
-    foreach my $key (sort keys(%stats))
+    if($csv)
     {
-        if($stats{$key}{'n'} <= 0)
-        {
-            next;
-        }
-
-        if($key eq 'cpu')
-        {
-            unless($cpu)
-            {
-                next;
-            }
-        }
-        else
-        {
-            unless($gpu)
-            {
-                next;
-            }
-        }
-       
-        my $n = $stats{$key}{'n'};
-        my $credit = $stats{$key}{'credit'};
-        my $runTime = $stats{$key}{'runTime'}; # Seconds
+        my $haveStats = 0;
         
-        my $cph = (60 * 60 * $credit) / $runTime;
-
-        my $name = $key;
-
-        if($name eq 'cpu')
+        foreach my $key (sort keys(%stats))
         {
-            $cph *= $cpuCount;
-            $runTime /= $cpuCount;
-            $name = $cpuModel;
+            unless(($key eq 'cpu') ? $cpu : $gpu)
+            {
+                next;
+            }
+           
+            if($stats{$key}{'n'} >= 25)
+            {
+                $haveStats = 1;
+                last;
+            }
         }
-        else
-        {
-            $name = $gpuModel;
-        }
-        print("$HOST_ID, $key, $name, $credit, $runTime, $cph, $n\n");
 
-        if($stats{$key}{'n'} >= 25)
+        if($haveStats)
         {
-            $haveStats = 1;
+            --$MAX_HOSTS;
+
+            if(!$MAX_HOSTS)
+            {
+                last;        
+            }
         }
     }
-
-    if($haveStats)
+    else
     {
-        --$MAX_HOSTS;
+        my $printHeading = 1;
+        my $cpuReserved = 0;
 
-        if(!$MAX_HOSTS)
+        foreach my $key (sort keys(%stats))
         {
-            last;        
+            if($key eq 'cpu')
+            {
+                next;
+            }
+
+            my $runTime = $stats{$key}{'runTime'}; # Seconds
+            my $cpuTime = $stats{$key}{'cpuTime'}; # Seconds
+
+            my $cpuUsage = $gpuConcurrency * $gpuCount * ($cpuTime / $runTime);
+            
+            if($cpuUsage > $cpuReserved)
+            {
+                $cpuReserved = $cpuUsage;
+            }
+        }
+
+        foreach my $key (sort keys(%stats))
+        {
+            unless(($key eq 'cpu') ? $cpu : $gpu)
+            {
+                next;
+            }
+
+            print("\n");
+
+            if($printHeading)
+            {
+                print("Host: $hostId");
+
+                if($gpuConcurrency > 1)
+                {
+                    print(" ($gpuConcurrency GPU Tasks / Card)");
+                }
+
+                print("\n\n");
+
+                $printHeading = 0;
+            }
+           
+            my $tasks = $stats{$key}{'n'};
+            my $credit = $stats{$key}{'credit'};
+            my $runTime = $stats{$key}{'runTime'}; # Seconds
+            my $cph = (60 * 60 * $credit) / $runTime;
+
+            if($key eq 'cpu')
+            {
+                print("$cpuModel\n");
+
+                my $count = $cpuCount - $cpuReserved;
+
+                printf("%8.0f Credit / Hour / Core\n", $cph);
+                printf("%8.0f Credit / Hour / %.1f Cores\n", $cph * $count, $count);
+                printf("%8d Tasks\n", $tasks);
+            }
+            else
+            {
+                my $api = $API_PRETTY{$key};
+                my $cpuTime = $stats{$key}{'cpuTime'}; # Seconds
+
+                print("$gpuModel ($api)\n");
+
+                $cph *= $gpuConcurrency;
+
+                printf("%8.0f Credit / Hour", $cph);
+
+                if($gpuCount > 1)
+                {
+                    print(" / Card\n");
+                    printf("%8.0f Credit / Hour / %d Cards", $cph * $gpuCount, $gpuCount);
+                }
+
+                print("\n");
+                printf("%7.0f%% Core / Task\n", 100 * $cpuTime / $runTime);
+                printf("%8d Tasks\n", $tasks);
+            }
         }
     }
 }
-
