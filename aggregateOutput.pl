@@ -9,6 +9,7 @@ my $MIN_HOST_IDS = 10;
 my %hardwareStats; # gpu -> { tdp => ..., gf => ... };
 
 my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA' );
+my @SORTED_API = ( 'OpenCL', 'CUDA' );
 
 my @TELESCOPES = ( 'All', 'Arecibo', 'Greenbank' );
 
@@ -172,7 +173,22 @@ sub aggregateResults($@)
     };
 }
 
+sub getAverageCpuLoad(@)
+{
+    my $totalRunTime = 0;
+    my $totalCpuTime = 0;
+
+    foreach (@_)
+    {
+        $totalRunTime += $_->{'runTime'};
+        $totalCpuTime += $_->{'cpuTime'};
+    }
+
+    return $totalCpuTime / $totalRunTime;
+}
+
 my %gpuToResults;
+my %gpuToCpuLoad;
 
 foreach my $gpu (keys %gpuToStats)
 {
@@ -207,6 +223,8 @@ foreach my $gpu (keys %gpuToStats)
             $bestCPH = $apiToResults{$api}{'All'}{'median'};
             $bestAPI = $api;
         }
+
+        $gpuToCpuLoad{$gpu}{$api} = getAverageCpuLoad(@results);
         
         # Arecibo: 17my10ab.26379.19699.15.42.58.vlar_2 
         # Greenbank: blc2_2bit_guppi_57403_68833_HIP11048_OFF_0003.27930.831.21.44.85.vlar_1
@@ -253,3 +271,28 @@ foreach my $telescope (@TELESCOPES)
 
     print("\n");
 }
+
+print("GPU, " . join(", ", @SORTED_API) . "\n");
+
+foreach my $gpuEx (@sortedGPUs)
+{
+    my $gpu = $gpuEx;
+    $gpu =~ s/ \(.*//;
+    
+    print("$gpu");
+
+    foreach my $api (@SORTED_API)
+    {
+        print(", ");
+
+        if(defined($gpuToCpuLoad{$gpu}{$api}))
+        {
+            print($gpuToCpuLoad{$gpu}{$api});
+        }
+    }
+
+    print("\n");
+}
+
+#use Data::Dumper;
+#print Dumper(%gpuToCpuLoad);
