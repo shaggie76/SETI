@@ -12,14 +12,20 @@ aggregate.pl [-cpu | -gpu] [-anon] [-v] [-max=n] <host id> [host id...]
 ```
 * Use -cpu or -gpu to specify one or the other (the default is to include both).
 * Use -anon if you want the anonymous platform (the default is to only collect stock).
-* Use -v to print verbose data as it scans.
+* Use -csv to print verbose data in comma-separated value format.
 * Use -max=n to stop after enough valid hosts are found.
 
 Example output:
 ```
-Host, API, Device, Credit, Seconds, Credit/Hour, Work Units
-8026559, cpu, Intel Core i7-5960X @ 3.00GHz, 8596.25, 42917.938125, 721.062132804871, 107
-8026559, opencl, NVIDIA GeForce GTX 980 Ti, 7727.68, 43382.76, 641.260445393516, 93
+aggregate.pl -gpu 8026559
+
+Host: 8026559 (2 GPU Tasks / Card)
+
+[2] NVIDIA GeForce GTX 980 Ti (OpenCL)
+     924 Credit / Hour / Card
+    1847 Credit / Hour / 2 Cards
+     95% Core / Task
+     502 Tasks
 ```
 **NOTE 1**: currently the cpu rate is automatically multiplied by the number of processors -- this is not ideal but is a fair approximation. GPU data, on the other hand, is not multiplied because we currently cannot know how many tasks are being being run at once.
 
