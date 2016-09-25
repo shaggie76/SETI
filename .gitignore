@@ -53,3 +53,4 @@ host.gz
 *.csv
 !HardwareStats.csv
 *.xlsx
+Inconclusives/

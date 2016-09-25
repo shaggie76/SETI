@@ -142,7 +142,7 @@ foreach my $hostId (@hostIds)
 
     for(my $offset = 0; $offset < $MAX_ROWS; $offset += $ROWS_PER_PAGE)
     {
-        my $url = "$BASE_URL/results.php?hostid=$hostId&offset=$offset&show_names=0&state=4&appid=$APP_ID&show_names=1";
+        my $url = "$BASE_URL/results.php?hostid=$hostId&offset=$offset&show_names=1&state=4&appid=$APP_ID";
 
         my $curl;
         open($curl, "curl --silent \"$url\" |") or die;
@@ -158,8 +158,6 @@ foreach my $hostId (@hostIds)
             {
                 @row = ();
             }
-
-            # <a href="result.php?resultid=5148890877">03no09ac.7184.21749.12.39.73_1</a></td>
 
             if(/result\.php\?resultid=(\d+)\"\>([^<]+)/)
             {
