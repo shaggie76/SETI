@@ -136,7 +136,7 @@ foreach my $hostId (@hostIds)
     $cpuModel =~ s/\s*$//;
     $cpuModel =~ s/^\s*//;
 
-    my $gpuConcurrency = -1;
+    my %gpuConcurrency;
 
     my $BASE_URL = "http://setiathome.berkeley.edu";
 
@@ -227,7 +227,7 @@ foreach my $hostId (@hostIds)
                             $stats{$statsKey}{'n'} = 1;
                         }
 
-                        if(!($statsKey eq 'cpu') && ($gpuConcurrency < 0))
+                        if(!($statsKey eq 'cpu') && !defined($gpuConcurrency{$statsKey}))
                         {
                             $url = "$BASE_URL/result.php?resultid=$resultId";
 
@@ -235,7 +235,7 @@ foreach my $hostId (@hostIds)
                             my @resultPage = <$curl>;
                             close($curl);
 
-                            $gpuConcurrency = 1;
+                            $gpuConcurrency{$statsKey} = 1;
 
                             # TODO: can also check for 
                             # "total_GPU_instances_num set to 5"
@@ -249,7 +249,7 @@ foreach my $hostId (@hostIds)
                             {
                                 if(/Number of app instances per device set to:\s*(\d+)/)
                                 {
-                                    $gpuConcurrency = $1;
+                                    $gpuConcurrency{$statsKey} = $1;
                                     last;
                                 }
                             }
@@ -275,7 +275,8 @@ foreach my $hostId (@hostIds)
                             {
                                 my $device = $gpuModel;
                                 my $api = $statsKey;
-                                print("$hostId, $resultId, $taskName, $device, $api, $credit, $runTime, $cpuTime, $gpuConcurrency\n");
+                                my $gpc = $gpuConcurrency{$statsKey};
+                                print("$hostId, $resultId, $taskName, $device, $api, $credit, $runTime, $cpuTime, $gpc\n");
                             }
                         }
 
@@ -340,7 +341,7 @@ foreach my $hostId (@hostIds)
             my $runTime = $stats{$key}{'runTime'}; # Seconds
             my $cpuTime = $stats{$key}{'cpuTime'}; # Seconds
 
-            my $cpuUsage = $gpuConcurrency * $gpuCount * ($cpuTime / $runTime);
+            my $cpuUsage = $gpuConcurrency{$key} * $gpuCount * ($cpuTime / $runTime);
             
             if($cpuUsage > $cpuReserved)
             {
@@ -361,9 +362,9 @@ foreach my $hostId (@hostIds)
             {
                 print("Host: $hostId");
 
-                if($gpuConcurrency > 1)
+                if($gpuConcurrency{$key} > 1)
                 {
-                    print(" ($gpuConcurrency GPU Tasks / Card)");
+                    print(" ($gpuConcurrency{$key} GPU Tasks / Card)");
                 }
 
                 print("\n\n");
@@ -393,7 +394,7 @@ foreach my $hostId (@hostIds)
 
                 print("$gpuModel ($api)\n");
 
-                $cph *= $gpuConcurrency;
+                $cph *= $gpuConcurrency{$key};
 
                 printf("%8.0f Credit / Hour", $cph);
 
