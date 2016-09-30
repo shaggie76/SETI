@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use List::Util qw(shuffle);
+use Date::Format;
 use File::stat;
 use Cwd;
 
@@ -12,7 +13,11 @@ my $MAX_HIDS = 200;
 
 my %gpuToIds;
 
-my @files = sort(glob("Output/*.csv"));
+my $sourceStat = stat("GPUs.csv");
+
+my $outputDir = time2str("%Y-%m-%d", $sourceStat->mtime);
+
+my @files = sort(glob("$outputDir/*.csv"));
 
 my %knownHIDs;
 
@@ -45,7 +50,6 @@ foreach my $file (@files)
 }
 
 open(my $fd, "GPUs.csv") or die;
-my $sourceStat = stat("GPUs.csv");
 
 while(<$fd>)
 {
@@ -138,7 +142,7 @@ sub nsort(@)
     my @sorted = @data{sort keys %data};
 }
 
-mkdir("Output");
+mkdir($outputDir);
 
 my $cwd = getcwd();
 
@@ -159,7 +163,7 @@ foreach my $model (nsort keys %gpuToIds)
 
     print("$model\n");
 
-    my $destFile = "Output/$model.csv";
+    my $destFile = "$outputDir/$model.csv";
     my $destStat = stat($destFile);
 
     if(defined($destStat) && ($sourceStat->mtime <= $destStat->mtime))

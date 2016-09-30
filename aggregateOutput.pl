@@ -43,78 +43,80 @@ close($fd);
 
 my %gpuToStats; # gpu -> api -> hostId -> resultId -> { csv fields }
 
-foreach my $file (sort(glob("Output/*.csv")))
+foreach my $outputDir (sort(glob("Output-*")))
 {
-    my $fd;
-    open($fd, $file) or die;
-
-    while(<$fd>)
+    foreach my $file (sort(glob("$outputDir/*.csv")))
     {
-        my @col = split(/, /, $_);
+        my $fd;
+        open($fd, $file) or die;
 
-        if(scalar(@col) != 9)
+        while(<$fd>)
         {
-            print("Parse error: $file $_");
-            next;
+            my @col = split(/, /, $_);
+
+            if(scalar(@col) != 9)
+            {
+                print("Parse error: $file $_");
+                next;
+            }
+
+            if($col[0] eq "HostID")
+            {
+                next;
+            }
+
+            my $hostId = int($col[0]);
+            my $resultId = int($col[1]);
+            my $taskName = $col[2];
+
+            my $gpu = $col[3];
+            my $api = $col[4];
+
+            my $credit = int($col[5]);
+            my $runTime = int($col[6]);
+            my $cpuTime = int($col[7]);
+            my $gpuConcurrency = int($col[8]);
+
+            if(($gpu =~ /^\[\d\]/) && ($gpu =~ /\&/))
+            {
+                next; # Omit multi-GPU
+            }
+
+            # Clean up some stuff missed by scanHosts.pl 
+            $gpu =~ s/Intel Intel/Intel/i;
+            $gpu =~ s/\bIntel\b/INTEL/i;
+            $gpu =~ s/AMD ATI\b/AMD/i;
+            $gpu =~ s/^GeForce\b/NVIDIA GeForce/i;
+            $gpu =~ s/\(R\)//gi;
+            $gpu =~ s/\(TM\)//gi;
+            $gpu =~ s/\s\s/ /g;
+
+            if(defined($API_PRETTY{lc($api)}))
+            {
+                $api = $API_PRETTY{lc($api)};
+            }
+            else
+            {
+                next;
+            }
+
+            my $cph = $gpuConcurrency * (60 * 60 * $credit) / $runTime;
+
+            # Note this nicely eliminates duplicate results
+            $gpuToStats{$gpu}{$api}{$hostId}{$resultId} =
+            {
+                hostId => $hostId,
+                taskName => $taskName,
+                credit => $credit,
+                runTime => $runTime,
+                cpuTime => $cpuTime,
+                gpuConcurrency => $gpuConcurrency,
+                cph => $cph
+            };
         }
 
-        if($col[0] eq "HostID")
-        {
-            next;
-        }
-
-        my $hostId = int($col[0]);
-        my $resultId = int($col[1]);
-        my $taskName = $col[2];
-
-        my $gpu = $col[3];
-        my $api = $col[4];
-
-        my $credit = int($col[5]);
-        my $runTime = int($col[6]);
-        my $cpuTime = int($col[7]);
-        my $gpuConcurrency = int($col[8]);
-
-        if(($gpu =~ /^\[\d\]/) && ($gpu =~ /\&/))
-        {
-            next; # Omit multi-GPU
-        }
-
-        # Clean up some stuff missed by scanHosts.pl 
-        $gpu =~ s/Intel Intel/Intel/i;
-        $gpu =~ s/\bIntel\b/INTEL/i;
-        $gpu =~ s/AMD ATI\b/AMD/i;
-        $gpu =~ s/^GeForce\b/NVIDIA GeForce/i;
-        $gpu =~ s/\(R\)//gi;
-        $gpu =~ s/\(TM\)//gi;
-        $gpu =~ s/\s\s/ /g;
-        $gpu =~ s/GeForce GTX 1060 6GB/GeForce GTX 1060/;
-
-        if(defined($API_PRETTY{lc($api)}))
-        {
-            $api = $API_PRETTY{lc($api)};
-        }
-        else
-        {
-            next;
-        }
-
-        my $cph = $gpuConcurrency * (60 * 60 * $credit) / $runTime;
-
-        # Note this nicely eliminates duplicate results
-        $gpuToStats{$gpu}{$api}{$hostId}{$resultId} =
-        {
-            hostId => $hostId,
-            taskName => $taskName,
-            credit => $credit,
-            runTime => $runTime,
-            cpuTime => $cpuTime,
-            gpuConcurrency => $gpuConcurrency,
-            cph => $cph
-        };
+        close($fd);
     }
-
-    close($fd);
 }
 
 foreach my $gpu (keys %gpuToStats)
@@ -293,6 +295,3 @@ foreach my $gpuEx (@sortedGPUs)
 
     print("\n");
 }
-
-#use Data::Dumper;
-#print Dumper(%gpuToCpuLoad);
