@@ -71,7 +71,7 @@ foreach my $hostId (@hostIds)
     my %stats;
 
     my $cpuCount;
-    my $gpuModel;
+    my $defaultGpu;
     my $cpuModel;
 
     my $url = "http://setiathome.berkeley.edu/show_host_detail.php?hostid=$hostId";
@@ -87,7 +87,7 @@ foreach my $hostId (@hostIds)
         }
         elsif(/>Coprocessors.*>([^>]*)<\/td>/)
         {
-            $gpuModel = $1;        
+            $defaultGpu = $1;        
         }
         elsif(/>CPU type.*>([^>]*)<\/td>/)
         {
@@ -97,27 +97,27 @@ foreach my $hostId (@hostIds)
 
     close($curl);
 
-    unless($cpuCount && $gpuModel && $cpuModel)
+    unless($cpuCount && $defaultGpu && $cpuModel)
     {
         die("Could not get host info from $url\n");
     }
 
     # NVIDIA GeForce GTX 750 Ti (2048MB) driver: 368.39 OpenCL: 1.2
-    $gpuModel =~ s/ \([0-9]+MB\)//g;
-    $gpuModel =~ s/ driver: [0-9\.]*//g;
-    $gpuModel =~ s/ OpenCL: [0-9\.]*//g;
+    $defaultGpu =~ s/ \([0-9]+MB\)//g;
+    $defaultGpu =~ s/ driver: [0-9\.]*//g;
+    $defaultGpu =~ s/ OpenCL: [0-9\.]*//g;
 
     # Deal with Multi-GPU
-    $gpuModel =~ s/ *, */ & /g;
+    $defaultGpu =~ s/ *, */ & /g;
 
     # Note: Copy/paste below and in scanHosts.pl
-    $gpuModel =~ s/\(R\)/ /g;
-    $gpuModel =~ s/\(TM\)/ /g;
-    $gpuModel =~ s/\s+/ /g;
-    $gpuModel =~ s/\s*$//;
-    $gpuModel =~ s/^\s*//;
+    $defaultGpu =~ s/\(R\)/ /g;
+    $defaultGpu =~ s/\(TM\)/ /g;
+    $defaultGpu =~ s/\s+/ /g;
+    $defaultGpu =~ s/\s*$//;
+    $defaultGpu =~ s/^\s*//;
 
-    my $deviceString = $gpuModel;
+    my $deviceString = $defaultGpu;
     my $gpuCount = 1 + ($deviceString =~ tr/&//);
 
     while($deviceString =~ /\[(\d+)\] /)
@@ -136,7 +136,8 @@ foreach my $hostId (@hostIds)
     $cpuModel =~ s/\s*$//;
     $cpuModel =~ s/^\s*//;
 
-    my %gpuConcurrency;
+    my %gpuConcurrency; # api -> concurrency
+    my %gpuDevices; # api -> device
 
     my $BASE_URL = "http://setiathome.berkeley.edu";
 
@@ -241,17 +242,98 @@ foreach my $hostId (@hostIds)
                             # "total_GPU_instances_num set to 5"
                             # and count devices?
 
-                            # TODO: get GPU models from this query instead; would be more accurate
-
                             # TODO; could, if we cared, get app version
+
+                            my $parsingDevices = 0;
+                            my $pendingDevices;
+
+                            my %devices;
 
                             foreach (@resultPage)
                             {
                                 if(/Number of app instances per device set to:\s*(\d+)/)
                                 {
                                     $gpuConcurrency{$statsKey} = $1;
-                                    last;
+                                    next;
                                 }
+
+                                if($csv)
+                                {
+                                    # don't try to parse when doing batch in CSV; it's not
+                                    # well tested and not important to the batch results
+                                    # because they discard multi-GPU hosts anyway.
+                                    next; 
+                                }
+
+                                if(/Number of devices:\s*(\d+)/i)
+                                {
+                                    $parsingDevices = 1;
+                                    $pendingDevices = int($1);
+                                    next;
+                                }
+
+                                if(/setiathome_CUDA: Found (\d+) CUDA device/)
+                                {
+                                    $parsingDevices = 1;
+                                    $pendingDevices = int($1);
+                                    next;
+                                }
+
+                                if($parsingDevices)
+                                {
+                                    if(/^\s*$/)
+                                    {
+                                        $parsingDevices = 0;
+                                        next
+                                    }
+                                    
+                                    if(/^\s*Name:\s*(.*)\s*$/ || /Device \d+: (.*) is okay/)
+                                    {
+                                        if(defined($devices{$1}))
+                                        {
+                                            ++$devices{$1};
+                                        }
+                                        else
+                                        {
+                                            $devices{$1} = 1;
+                                        }
+                                        --$pendingDevices;
+                                        next;
+                                    }
+                                }
+                            }
+
+                            if($pendingDevices)
+                            {
+                                print("Could not parse devices from $url\n");
+                                $gpuDevices{$statsKey} = $defaultGpu;
+                            }
+                            elsif(defined($pendingDevices))
+                            {
+                                my $d = "";
+
+                                foreach my $g (sort {($devices{$a} != $devices{$b}) ? $devices{$b} <=> $devices{$a} : $a cmp $b} keys(%devices))
+                                {
+                                    if($d)
+                                    {
+                                        $d .= " & ";
+                                    }
+
+                                    my $n = $devices{$g};
+
+                                    if($n > 1)
+                                    {
+                                        $d .= "[$n] ";
+                                    }
+
+                                    $d .= $g;
+                                }
+
+                                $gpuDevices{$statsKey} = $d;
+                            }
+                            else
+                            {
+                                $gpuDevices{$statsKey} = $defaultGpu;
                             }
                         }
 
@@ -273,8 +355,8 @@ foreach my $hostId (@hostIds)
                             }
                             else
                             {
-                                my $device = $gpuModel;
                                 my $api = $statsKey;
+                                my $device = $gpuDevices{$statsKey};
                                 my $gpc = $gpuConcurrency{$statsKey};
                                 print("$hostId, $resultId, $taskName, $device, $api, $credit, $runTime, $cpuTime, $gpc\n");
                             }
@@ -360,15 +442,7 @@ foreach my $hostId (@hostIds)
 
             if($printHeading)
             {
-                print("Host: $hostId");
-
-                if($gpuConcurrency{$key} > 1)
-                {
-                    print(" ($gpuConcurrency{$key} GPU Tasks / Card)");
-                }
-
-                print("\n\n");
-
+                print("Host: $hostId\n\n");
                 $printHeading = 0;
             }
            
@@ -390,11 +464,29 @@ foreach my $hostId (@hostIds)
             else
             {
                 my $api = $API_PRETTY{$key};
+                my $device = $gpuDevices{$key};
                 my $cpuTime = $stats{$key}{'cpuTime'}; # Seconds
+                my $gpc = $gpuConcurrency{$key};
 
-                print("$gpuModel ($api)\n");
+                print("$device");
 
-                $cph *= $gpuConcurrency{$key};
+                $deviceString = $device;
+                my $gpuCount = 1 + ($deviceString =~ tr/&//);
+
+                while($deviceString =~ /\[(\d+)\] /)
+                {
+                    $gpuCount += ($1 - 1);
+                    $deviceString =~ s/\[\d+\] //;
+                }
+
+                if($gpc > 1)
+                {
+                    print(", $gpc Tasks / Card");
+                }
+
+                print(" ($api)\n");
+
+                $cph *= $gpc;
 
                 printf("%8.0f Credit / Hour", $cph);
 
