@@ -287,7 +287,7 @@ foreach my $hostId (@hostIds)
                                         next
                                     }
                                     
-                                    if(/^\s*Name:\s*(.*)\s*$/ || /Device \d+: (.*) is okay/)
+                                    if(/^\s*Name:\s*(.*)\s*$/ || /Device \d+: ([^,]*)/)
                                     {
                                         if(defined($devices{$1}))
                                         {
@@ -298,6 +298,11 @@ foreach my $hostId (@hostIds)
                                             $devices{$1} = 1;
                                         }
                                         --$pendingDevices;
+
+                                        unless($pendingDevices)
+                                        {
+                                            $parsingDevices = 0;
+                                        }
                                         next;
                                     }
                                 }
@@ -305,7 +310,8 @@ foreach my $hostId (@hostIds)
 
                             if($pendingDevices)
                             {
-                                print("Could not parse devices from $url\n");
+                                print("Could not parse devices from $url ($pendingDevices pending)\n");
+                                die;
                                 $gpuDevices{$statsKey} = $defaultGpu;
                             }
                             elsif(defined($pendingDevices))
@@ -420,8 +426,8 @@ foreach my $hostId (@hostIds)
                 next;
             }
 
-            my $runTime = $stats{$key}{'runTime'}; # Seconds
-            my $cpuTime = $stats{$key}{'cpuTime'}; # Seconds
+            my $runTime = $stats{$key}{'runTime'};
+            my $cpuTime = $stats{$key}{'cpuTime'};
 
             my $cpuUsage = $gpuConcurrency{$key} * $gpuCount * ($cpuTime / $runTime);
             
@@ -448,7 +454,7 @@ foreach my $hostId (@hostIds)
            
             my $tasks = $stats{$key}{'n'};
             my $credit = $stats{$key}{'credit'};
-            my $runTime = $stats{$key}{'runTime'}; # Seconds
+            my $runTime = $stats{$key}{'runTime'};
             my $cph = (60 * 60 * $credit) / $runTime;
 
             if($key eq 'cpu')
