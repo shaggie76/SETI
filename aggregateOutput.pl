@@ -168,10 +168,14 @@ sub aggregateResults($@)
     {
         'tasks' => $n,
         'hosts' => scalar(keys(%hosts)),
-        'min' => $_[$minIndex]->{"cph"},
-        'max' => $_[$maxIndex]->{"cph"},
-        'median' => $_[int(($n * 0.5) + 0.5)]->{"cph"},
-        'cpwh' => $_[int(($n * 0.5) + 0.5)]->{"cph"} / $tdp
+
+        'minCPH' => $_[$minIndex]->{"cph"},
+        'maxCPH' => $_[$maxIndex]->{"cph"},
+        'medCPH' => $_[int(($n * 0.5) + 0.5)]->{"cph"},
+
+        'minCPWH' => $_[$minIndex]->{"cph"} / $tdp,
+        'maxCPWH' => $_[$maxIndex]->{"cph"} / $tdp,
+        'medCPWH' => $_[int(($n * 0.5) + 0.5)]->{"cph"} / $tdp
     };
 }
 
@@ -220,9 +224,9 @@ foreach my $gpu (keys %gpuToStats)
 
         $apiToResults{$api}{'All'} = aggregateResults($tdp, @results);
 
-        if($apiToResults{$api}{'All'}{'median'} > $bestCPH)
+        if($apiToResults{$api}{'All'}{'medCPH'} > $bestCPH)
         {
-            $bestCPH = $apiToResults{$api}{'All'}{'median'};
+            $bestCPH = $apiToResults{$api}{'All'}{'medCPH'};
             $bestAPI = $api;
         }
 
@@ -252,13 +256,13 @@ foreach my $gpu (keys %gpuToStats)
     $gpuToResults{"$gpu ($bestAPI)"} = $apiToResults{$bestAPI};
 }
 
-my @sortedGPUs = sort { $gpuToResults{$a}{'All'}{'median'} <=> $gpuToResults{$b}{'All'}{'median'} } keys(%gpuToResults);
+my @sortedGPUs = sort { $gpuToResults{$a}{'All'}{'medCPH'} <=> $gpuToResults{$b}{'All'}{'medCPH'} } keys(%gpuToResults);
 
-my @CSV_FIELDS = ( 'hosts', 'tasks', 'median', 'cpwh', 'max', 'min' );
+my @CSV_FIELDS = ( 'hosts', 'tasks', 'medCPH', 'maxCPH', 'minCPH', 'medCPWH', 'maxCPWH', 'minCPWH' );
 
 foreach my $telescope (@TELESCOPES)
 {
-    print("GPU ($telescope), Hosts, Tasks, Median, CPWH, Max, Min\n");
+    print("GPU ($telescope), Hosts, Tasks, CPH Median, CPH Max, CPH Min, CPWH Median, CPWH Max, CPH Min\n");
 
     foreach my $gpu (@sortedGPUs)
     {
