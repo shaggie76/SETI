@@ -15,38 +15,53 @@ my %gpuToIds;
 
 my $sourceStat = stat("GPUs.csv");
 
-my $outputDir = time2str("%Y-%m-%d", $sourceStat->mtime);
-
-my @files = sort(glob("$outputDir/*.csv"));
+my $outputDir = "Output-" . time2str("%Y-%m-%d", $sourceStat->mtime);
 
 my %knownHIDs;
+my $rescan = 0;
 
-foreach my $file (@files)
+foreach my $arg (@ARGV)
 {
-    my $fd;
-
-    open($fd, $file) or die;
-
-    while(<$fd>)
+    if($arg eq "-rescan")
     {
-        my @col = split(/, /, $_);
-
-        if(scalar(@col) != 9)
-        {
-            print("Parse error: $file $_\n");
-            next;
-        }
-
-        if($col[0] eq "HostID")
-        {
-            next;
-        }
-
-        my $hid = int($col[0]);
-        $knownHIDs{$hid} = 1;
+        $rescan = 1;
+        next;
     }
 
-    close($fd);
+    die("Bad arg: $arg\n");
+}
+
+if($rescan)
+{
+    my @files = sort(glob("$outputDir/*.csv"));
+
+    foreach my $file (@files)
+    {
+        my $fd;
+
+        open($fd, $file) or die;
+
+        while(<$fd>)
+        {
+            my @col = split(/, /, $_);
+
+            if(scalar(@col) != 9)
+            {
+                print("Parse error: $file $_\n");
+                next;
+            }
+
+            if($col[0] eq "HostID")
+            {
+                next;
+            }
+
+            my $hid = int($col[0]);
+            $knownHIDs{$hid} = 1;
+        }
+
+        close($fd);
+    }
 }
 
 open(my $fd, "GPUs.csv") or die;
@@ -65,7 +80,12 @@ while(<$fd>)
 
         $model =~ s/\s+[0-9]+ ?GB$//i; # Ignore on-board memory size for now
 
-        if(($model =~ /[0-9][0-9][0-9]MX?\b/) || ($model =~ /R9 M\d\d\d/))
+        if
+        (
+            ($model =~ /[0-9][0-9][0-9]MX?\b/) ||
+            ($model =~ /R9 M\d\d\d/) ||
+            ($model =~ / Kalindi/)
+        )
         {
             next; # Skip mobile cards
         }
@@ -164,11 +184,15 @@ foreach my $model (nsort keys %gpuToIds)
     print("$model\n");
 
     my $destFile = "$outputDir/$model.csv";
-    my $destStat = stat($destFile);
 
-    if(defined($destStat) && ($sourceStat->mtime <= $destStat->mtime))
+    unless($rescan)
     {
-        next;
+        my $destStat = stat($destFile);
+
+        if(defined($destStat) && ($sourceStat->mtime <= $destStat->mtime))
+        {
+            next;
+        }
     }
 
     my $max = int(scalar(@hids) / 2);

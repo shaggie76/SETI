@@ -43,9 +43,13 @@ scanHosts.pl > GPUs.csv
 
 ### aggregateGPUs.pl
 
-Once you have `GPUs.csv` this script script randomly shuffles the hosts for each GPU and calls aggregate.pl for a small subset of them; it appends the results to a CSV in the Output folder named for each model. 
+Once you have `GPUs.csv` this script script randomly shuffles the hosts for each GPU and calls aggregate.pl for a small subset of them; it appends the results to a CSV in the output folder named for each model. 
 
-Note that if you re-run the aggregate without clearing the results folder first it will only scan hosts that it has not previsouly scanned. 
+It names the output folder with the date-stamp of the hosts.gz file; it also handles incremental output so that if you cancel and restart it should resume on the card it was scanning. 
+
+If you re-run he script after fetching a new hosts.gz it will use a new output folder and start over -- the idea is generally I get a new hosts.gz every few weeks and generate graphs for the forums.
+
+If you wan to improve resolution for a scan you can re-run it with the -rescan command-line argument; this will do a full scan but will only includes hosts that it has not previously scanned in that hosts.gz.
 
 ### aggregateOutput.pl
 
