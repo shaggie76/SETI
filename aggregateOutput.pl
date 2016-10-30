@@ -72,9 +72,9 @@ foreach my $outputDir (sort(glob("Output-*")))
             my $gpu = $col[3];
             my $api = $col[4];
 
-            my $credit = int($col[5]);
-            my $runTime = int($col[6]);
-            my $cpuTime = int($col[7]);
+            my $credit = $col[5];
+            my $runTime = $col[6];
+            my $cpuTime = $col[7];
             my $gpuConcurrency = int($col[8]);
 
             if(($gpu =~ /^\[\d\]/) && ($gpu =~ /\&/))
@@ -181,10 +181,12 @@ sub aggregateResults($@)
 
         'minCPH' => $_[$minIndex]->{"cph"},
         'maxCPH' => $_[$maxIndex]->{"cph"},
+        'dltCPH' => $_[$maxIndex]->{"cph"} - $_[$minIndex]->{"cph"},
         'medCPH' => $_[int(($n * 0.5) + 0.5)]->{"cph"},
 
         'minCPWH' => $_[$minIndex]->{"cph"} / $tdp,
         'maxCPWH' => $_[$maxIndex]->{"cph"} / $tdp,
+        'dltCPWH' => $_[$maxIndex]->{"cph"} / $tdp - $_[$minIndex]->{"cph"} / $tdp,
         'medCPWH' => $_[int(($n * 0.5) + 0.5)]->{"cph"} / $tdp,
 
         'avgCPH' => $avgCPH,
@@ -271,11 +273,11 @@ foreach my $gpu (keys %gpuToStats)
 
 my @sortedGPUs = sort { $gpuToResults{$a}{'All'}{'medCPH'} <=> $gpuToResults{$b}{'All'}{'medCPH'} } keys(%gpuToResults);
 
-my @CSV_FIELDS = ( 'hosts', 'tasks', 'avgCPH', 'devCPH', 'medCPH', 'maxCPH', 'minCPH', 'medCPWH', 'maxCPWH', 'minCPWH' );
+my @CSV_FIELDS = ( 'hosts', 'tasks', 'avgCPH', 'devCPH', 'medCPH', 'maxCPH', 'minCPH', 'dltCPH', 'medCPWH', 'maxCPWH', 'minCPWH', 'dltCPWH' );
 
 foreach my $telescope (@TELESCOPES)
 {
-    print("GPU ($telescope), Hosts, Tasks, CPH Average, CPH StdDev, CPH Median, CPH Max, CPH Min, CPWH Median, CPWH Max, CPHH Min\n");
+    print("GPU ($telescope), Hosts, Tasks, CPH Average, CPH StdDev, CPH Median, CPH Max, CPH Min, CPH Delta, CPWH Median, CPWH Max, CPWH Min, CPWH Delta\n");
 
     foreach my $gpu (@sortedGPUs)
     {
