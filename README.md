@@ -27,7 +27,7 @@ Host: 8026559 (2 GPU Tasks / Card)
      95% Core / Task
      502 Tasks
 ```
-**NOTE 1**: currently the cpu rate is automatically multiplied by the number of processors -- this is not ideal but is a fair approximation. GPU data, on the other hand, is not multiplied because we currently cannot know how many tasks are being being run at once.
+**NOTE 1**: currently the cpu rate is automatically multiplied by the number of processors less the theoretical CPU footprint for the GPU tasks -- this isn't great because we may think you only need 1.5 cores for GPU tasks but you may have configured it to reserve a whole core regardless of whether it needs it. Furthermore it depends on the "-instances_per_device" multibeam command-line to give us output to detect people running multiple hosts (this option doesn't seem to be supported on all platforms yet and it may not even be required so I don't see it used much).
 
 **NOTE 2**: the GUPPI Rescheduler will completely invalidate the CPU/GPU breakdown because the server has no idea that you've subcontracted a task to a different type of processor.
 
