@@ -84,7 +84,7 @@ while(<$fd>)
         (
             ($model =~ /[0-9][0-9][0-9]MX?\b/) ||
             ($model =~ /R9 M\d\d\d/) ||
-            ($model =~ / Kalindi/)
+            ($model =~ /Kalindi/i)
         )
         {
             next; # Skip mobile cards
