@@ -81,17 +81,32 @@ foreach my $hostId (@hostIds)
 
     while(<$curl>)
     {
-        if(/>Number of processors.*>([0-9]*)<\/td>/)
+        if(/Number of processors/)
         {
-            $cpuCount = $1;        
+            $_ = <$curl>;
+
+            if(/>\s*([0-9]+)\s*</)
+            {
+                $cpuCount = $1;        
+            }
         }
-        elsif(/>Coprocessors.*>([^>]*)<\/td>/)
+        elsif(/Coprocessors/)
         {
-            $defaultGpu = $1;        
+            $_ = <$curl>;
+
+            if(/>(.*)</)
+            {
+                $defaultGpu = $1;        
+            }
         }
-        elsif(/>CPU type.*>([^>]*)<\/td>/)
+        elsif(/CPU type/)
         {
-            $cpuModel = $1;        
+            $_ = <$curl>;
+
+            if(/>\s*(.*)<\/td/)
+            {
+                $cpuModel = $1;        
+            }
         }
     }
 
