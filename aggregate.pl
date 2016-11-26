@@ -126,8 +126,8 @@ foreach my $hostId (@hostIds)
     $defaultGpu =~ s/ *, */ & /g;
 
     # Note: Copy/paste below and in scanHosts.pl
-    $defaultGpu =~ s/\(R\)/ /g;
-    $defaultGpu =~ s/\(TM\)/ /g;
+    $defaultGpu =~ s/\(R\)/ /ig;
+    $defaultGpu =~ s/\(TM\)/ /ig;
     $defaultGpu =~ s/\s+/ /g;
     $defaultGpu =~ s/\s*$//;
     $defaultGpu =~ s/^\s*//;
@@ -142,11 +142,14 @@ foreach my $hostId (@hostIds)
     }
 
     # Intel(R) Xeon(R) CPU           W3550  @ 3.07GHz [Family 6 Model 26 Stepping 5]
+    $cpuModel =~ s/.*<br>//g;
+    $cpuModel =~ s/\s+/ /g;
     $cpuModel =~ s/\[Family.*//;
     $cpuModel =~ s/ CPU / /;
 
-    $cpuModel =~ s/\(R\)/ /g;
-    $cpuModel =~ s/\(TM\)/ /g;
+    $cpuModel =~ s/\(R\)/ /ig;
+    $cpuModel =~ s/\(TM\)/ /ig;
+    $cpuModel =~ s/\s+-/-/ig;
     $cpuModel =~ s/\s+/ /g;
     $cpuModel =~ s/\s*$//;
     $cpuModel =~ s/^\s*//;
