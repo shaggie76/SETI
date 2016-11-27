@@ -16,7 +16,7 @@ my $gpu = 1;
 my $anon = 0;
 my $csv = 0;
 
-my @hostIds = ();
+my @hostIds;
 
 my %API_PRETTY = ( 'opencl' => 'OpenCL', 'cuda' => 'CUDA', 'gpu' => 'Anonymous' );
 
@@ -52,7 +52,7 @@ foreach my $arg (@ARGV)
         next;
     }
 
-    if($arg =~ /^\d+$/)
+    if(($arg =~ /^\d+$/) || ($arg =~ /^([^)]*)\((\d+)\)$/))
     {
         push(@hostIds, $arg);
         next;
@@ -68,6 +68,14 @@ if($csv)
 
 foreach my $hostId (@hostIds)
 {
+    my $hostName = "";
+
+    if($hostId =~ /^([^)]*)\((\d+)\)$/)
+    {
+        $hostName = $1;
+        $hostId = $2;
+    }
+
     my %stats;
 
     my $cpuCount;
@@ -466,7 +474,14 @@ foreach my $hostId (@hostIds)
 
             if($printHeading)
             {
-                print("Host: $hostId\n\n");
+                if($hostName)
+                {
+                    print("Host: $hostName ($hostId)\n\n");
+                }
+                else
+                {
+                    print("Host: $hostId\n\n");
+                }
                 $printHeading = 0;
             }
            
