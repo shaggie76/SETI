@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-my $MIN_WORK_UNITS = 10;
+my $MIN_WORK_UNITS = 25;
 my $MIN_HOST_IDS = 10;
 
 my %hardwareStats; # gpu -> { tdp => ..., gf => ... };

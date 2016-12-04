@@ -28,6 +28,12 @@ foreach my $arg (@ARGV)
         next;
     }
 
+    if($arg =~ /^-max=(\d+)$/)
+    {
+        $MAX_HIDS = int($1);
+        next;
+    }
+
     die("Bad arg: $arg\n");
 }
 
