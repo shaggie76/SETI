@@ -5,10 +5,54 @@
 use strict;
 use warnings;
 
-open(my $fd, 'gunzip -d -c host.gz |') or die;
-
 my $MIN_CREDITS = 10000;
 my $MIN_RPC_TIME = time() - (7 * 24 * 60 * 60);
+
+# AMD GCN GPU recognition fixed in 7.6.33
+my $MIN_VERSION_X = 7;
+my $MIN_VERSION_Y = 6;
+my $MIN_VERSION_Z = 33;
+
+sub CheckBoincVersion($$$)
+{
+    my $x = shift;
+
+    if($x < $MIN_VERSION_X)
+    {
+        return 0;
+    }
+
+    if($x > $MIN_VERSION_X)
+    {
+        return 1;
+    }
+
+    my $y = shift;
+
+    if($y < $MIN_VERSION_Y)
+    {
+        return 0;
+    }
+
+    if($y > $MIN_VERSION_Y)
+    {
+        return 1;
+    }
+
+    my $z = shift;
+
+    if($z < $MIN_VERSION_Z)
+    {
+        return 0;
+    }
+
+    if($z > $MIN_VERSION_Z)
+    {
+        return 1;
+    }
+
+    return 1;
+}
 
 sub CheckHost($$$$)
 {
@@ -30,6 +74,18 @@ sub CheckHost($$$$)
     }
 
     # [BOINC|7.6.22]
+    if($coprocs =~ /\[BOINC\|([0-9]+)\.([0-9]+)\.([0-9]+)\]/)
+    {
+        unless(CheckBoincVersion($1, $2, $3))
+        {
+            return;
+        }
+    }
+    else
+    {
+        return;
+    }
+
     $coprocs =~ s/\[BOINC\|[0-9.]*\]//g;
 
     # [vbox|5.0.20r106931]
@@ -43,7 +99,6 @@ sub CheckHost($$$$)
     }
 
     # [CUDA|GeForce GTX 750 Ti|2|2048MB|36510|102]
-
     my @cp = split(/\|/, $coprocs);
 
     if(scalar(@cp) < 3)
@@ -61,14 +116,22 @@ sub CheckHost($$$$)
     $coprocs = $cp[1];
 
     # Note: copy/paste in aggregate.pl
+    $coprocs =~ s/ \(\S+\)$//g;
     $coprocs =~ s/\(R\)/ /g;
     $coprocs =~ s/\(TM\)/ /g;
     $coprocs =~ s/\s+/ /g;
     $coprocs =~ s/\s*$//;
-    $coprocs =~ s/^\s*//;
+    $coprocs =~ s/^\s*//; 
+    $coprocs =~ s/^ATI Radeon/AMD Radeon/i;
+
+    # Recent bug in web site actually prints:
+    # AMD AMD Radeon (TM) R9 Fury Series (4096MB) OpenCL: 2.0
+    $coprocs =~ s/^AMD AMD/AMD/;
 
     print("$id,$coprocs\n");
 }
+
+open(my $fd, 'gunzip -d -c host.gz |') or die;
 
 my $id = 0;
 my $total_credit = 0;

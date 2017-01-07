@@ -84,6 +84,11 @@ while(<$fd>)
             next;
         }
 
+        if($model =~ /\//)
+        {
+            next; # Skip vauge "AMD Radeon HD 2300/2400/3200/4200"
+        }
+
         $model =~ s/\s+[0-9]+ ?GB$//i; # Ignore on-board memory size for now
 
         if
@@ -138,6 +143,9 @@ while(<$fd>)
         {
             next; # Skip older generation AMD processors
         }
+
+        $model =~ s/^Radeon /AMD Radeon /; # Some platforms omit AMD
+        $model =~ s/ Graphics$//i;
 
         unless($model)
         {
