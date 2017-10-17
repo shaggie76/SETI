@@ -13,6 +13,8 @@ my $MIN_VERSION_X = 7;
 my $MIN_VERSION_Y = 6;
 my $MIN_VERSION_Z = 33;
 
+my %knownCoprocs;
+
 sub CheckBoincVersion($$$)
 {
     my $x = shift;
@@ -116,17 +118,22 @@ sub CheckHost($$$$)
     $coprocs = $cp[1];
 
     # Note: copy/paste in aggregate.pl
-    $coprocs =~ s/ \(\S+\)$//g;
+    $coprocs =~ s/\([0-9][0-9]*-bit\)$//gi;
     $coprocs =~ s/\(R\)/ /g;
     $coprocs =~ s/\(TM\)/ /g;
     $coprocs =~ s/\s+/ /g;
     $coprocs =~ s/\s*$//;
     $coprocs =~ s/^\s*//; 
     $coprocs =~ s/^ATI Radeon/AMD Radeon/i;
+    $coprocs =~ s/^(AMD .* )\(.*\)/$1/g;
+    $coprocs =~ s/:/ /g; 
 
     # Recent bug in web site actually prints:
     # AMD AMD Radeon (TM) R9 Fury Series (4096MB) OpenCL: 2.0
     $coprocs =~ s/^AMD AMD/AMD/;
+
+    # Hacks for testing name filtering
+    # if(defined($knownCoprocs{$coprocs})) { return; } $knownCoprocs{$coprocs} = 1;
 
     print("$id,$coprocs\n");
 }

@@ -134,7 +134,7 @@ foreach my $hostId (@hostIds)
     $defaultGpu =~ s/ *, */ & /g;
 
     # Note: Copy/paste below and in scanHosts.pl
-    $defaultGpu =~ s/ \(\S+\)$//ig;
+    $defaultGpu =~ s/\([0-9][0-9]*-bit\)$//gi;
     $defaultGpu =~ s/\(R\)/ /ig;
     $defaultGpu =~ s/\(TM\)/ /ig;
     $defaultGpu =~ s/\s+/ /g;
@@ -142,6 +142,8 @@ foreach my $hostId (@hostIds)
     $defaultGpu =~ s/^\s*//;
     $defaultGpu =~ s/[\/\\]/-/g;
     $defaultGpu =~ s/^ATI Radeon/AMD Radeon/i;
+    $defaultGpu =~ s/^(AMD .* )\(.*\)/$1/g;
+    $defaultGpu =~ s/:/ /g; 
 
     # Recent bug in web site actually prints:
     # AMD AMD Radeon (TM) R9 Fury Series (4096MB) OpenCL: 2.0
