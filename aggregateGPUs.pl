@@ -113,20 +113,34 @@ while(<$fd>)
             ($model =~ /SuperSumo/i) ||
             ($model =~ s/ \(\d+-bit\)$//) ||
             ($model =~ /XT Prototype/i) ||
-            ($model =~ /unknown/i)
+            ($model =~ /unknown/i) ||
+            ($model =~ /\b67EF.CF\b/i)
         )
         {
             next; # Skip weird cards
         }
 
-        if((($model =~ /NVIDIA/i) || ($model =~ /GeForce/i)) && !($model =~ /\bGTX\b/i))
+        if
+        (
+            (($model =~ /\bNVIDIA\b/i) || ($model =~ /\bGeForce\b/i)) &&
+            !(($model =~ /\bGTX\b/i) || ($model =~ /\bTitan\b/i))
+        )
+        {
+            next; # Skip economy Nvidia cards
+        }
+
+        if
+        (
+            ($model =~ /GeForce [2-9]\d\d\d/i) ||
+            ($model =~ /GeForce GTX [1-2]\d\d\b/i)
+        )
         {
             next; # Skip older generation Nvidia cards
         }
 
-        if($model =~ /GeForce [2-9]\d\d\d/i)
+        if(/\bRadeon R[1-9] (Graphics|Series)?$/)
         {
-            next; # Skip older generation Nvidia cards
+            next; # Skip ambiguous R-series
         }
 
         if
@@ -136,12 +150,23 @@ while(<$fd>)
             ($model =~ /^Iris\b/i)
         )
         {
-            next; # Skip embedded
+            # Intel HD Graphics without a number spans multiple CPU gens and
+            # some parts also clocked differently so only accept limited
+            # models now:
+            unless($model =~ /^Intel HD Graphics [0-9]{3,4}$/)
+            {
+                next;
+            }
         }
 
-        if(($model =~ /Radeon HD ?\d.\d\d/i) || ($model =~ /Mullins/i))
+        if
+        (
+            ($model =~ /Radeon HD ?\d.\d\d/i) ||
+            ($model =~ /Radeon R[1-6]\b/i) ||
+            ($model =~ /Mullins/i)
+        )
         {
-            next; # Skip older generation AMD processors
+            next; # Skip older generation AMD cards
         }
 
         $model =~ s/^Radeon /AMD Radeon /; # Some platforms omit AMD
