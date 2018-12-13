@@ -123,7 +123,7 @@ while(<$fd>)
         if
         (
             (($model =~ /\bNVIDIA\b/i) || ($model =~ /\bGeForce\b/i)) &&
-            !(($model =~ /\bGTX\b/i) || ($model =~ /\bTitan\b/i))
+            !(($model =~ /\b[GR]TX\b/i) || ($model =~ /\bTitan\b/i))
         )
         {
             next; # Skip economy Nvidia cards
@@ -138,7 +138,11 @@ while(<$fd>)
             next; # Skip older generation Nvidia cards
         }
 
-        if(/\bRadeon R[1-9] (Graphics|Series)?$/)
+        if
+        (
+            (/\bRadeon R[1-9] (Graphics|Series)?$/) ||
+            (/\bRadeon [0-9]{3} Series$/)
+        )
         {
             next; # Skip ambiguous R-series
         }
@@ -153,10 +157,10 @@ while(<$fd>)
             # Intel HD Graphics without a number spans multiple CPU gens and
             # some parts also clocked differently so only accept limited
             # models now:
-            unless($model =~ /^Intel HD Graphics [0-9]{3,4}$/)
-            {
+            #unless($model =~ /^Intel HD Graphics [0-9]{3,4}$/)
+            #{
                 next;
-            }
+            #}
         }
 
         if
@@ -170,7 +174,7 @@ while(<$fd>)
         }
 
         $model =~ s/^Radeon /AMD Radeon /; # Some platforms omit AMD
-        $model =~ s/ Graphics$//i;
+        $model =~ s/ (Graphics|Series|Compute Engine)$//i;
 
         unless($model)
         {

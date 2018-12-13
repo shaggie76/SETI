@@ -87,6 +87,7 @@ foreach my $outputDir (sort(glob("Output-*")))
             $gpu =~ s/\bIntel\b/INTEL/i;
             $gpu =~ s/AMD ATI\b/AMD/i;
             $gpu =~ s/^GeForce\b/NVIDIA GeForce/i;
+            $gpu =~ s/ (Graphics|Series|Compute Engine)$//i;
             $gpu =~ s/\(R\)//gi;
             $gpu =~ s/\(TM\)//gi;
             $gpu =~ s/\s\s/ /g;
@@ -154,19 +155,19 @@ sub aggregateResults($@)
     }
 
     # Winsorize the middle 60% -- larger windows tend to include too many outliers
-    my $minIndex = int(($n * 0.2) + 0.5);
-    my $maxIndex = int(($n * 0.8) + 0.5);
+    my $minIndex = int((($n - 1) * 0.2) + 0.5);
+    my $maxIndex = int((($n - 1) * 0.8) + 0.5);
 
     my $sum = 0;
     my $sum2 = 0;
 
     my %hosts;
 
-    foreach (@_)
+    foreach my $result (@_)
     {
-        $hosts{$_->{'hostId'}} = 1;
+        $hosts{$result->{'hostId'}} = 1;
 
-        my $cph = $_->{'cph'};
+        my $cph = $result->{'cph'};
         $sum += $cph;
         $sum2 += $cph * $cph;
     }
@@ -174,20 +175,22 @@ sub aggregateResults($@)
     my $avgCPH = $sum / $n;
     my $devCPH = sqrt(($sum2 / $n) - ($avgCPH * $avgCPH));
 
+    my $medIndex = int(($n * 0.5) + 0.5);
+
     return
     {
         'tasks' => $n,
         'hosts' => scalar(keys(%hosts)),
 
-        'minCPH' => $_[$minIndex]->{"cph"},
-        'maxCPH' => $_[$maxIndex]->{"cph"},
-        'dltCPH' => $_[$maxIndex]->{"cph"} - $_[$minIndex]->{"cph"},
-        'medCPH' => $_[int(($n * 0.5) + 0.5)]->{"cph"},
+        'minCPH' => $_[$minIndex]->{'cph'},
+        'maxCPH' => $_[$maxIndex]->{'cph'},
+        'dltCPH' => $_[$maxIndex]->{'cph'} - $_[$minIndex]->{'cph'},
+        'medCPH' => $_[$medIndex]->{'cph'},
 
-        'minCPWH' => $_[$minIndex]->{"cph"} / $tdp,
-        'maxCPWH' => $_[$maxIndex]->{"cph"} / $tdp,
-        'dltCPWH' => $_[$maxIndex]->{"cph"} / $tdp - $_[$minIndex]->{"cph"} / $tdp,
-        'medCPWH' => $_[int(($n * 0.5) + 0.5)]->{"cph"} / $tdp,
+        'minCPWH' => $_[$minIndex]->{'cph'} / $tdp,
+        'maxCPWH' => $_[$maxIndex]->{'cph'} / $tdp,
+        'dltCPWH' => $_[$maxIndex]->{'cph'} / $tdp - $_[$minIndex]->{'cph'} / $tdp,
+        'medCPWH' => $_[$medIndex]->{'cph'} / $tdp,
 
         'avgCPH' => $avgCPH,
         'devCPH' => $devCPH
@@ -215,7 +218,7 @@ foreach my $gpu (keys %gpuToStats)
 {
     unless(defined($hardwareStats{$gpu}{'tdp'}))
     {
-        print("No TDP for $gpu\n");
+        print(STDERR "No TDP for $gpu\n");
         next;
     }
 
@@ -235,7 +238,7 @@ foreach my $gpu (keys %gpuToStats)
             push(@results, values(%{$gpuToStats{$gpu}{$api}{$hostId}}));
         }
 
-        @results = sort { $a->{"cph"} <=> $b->{"cph"} } @results;
+        @results = sort { $a->{'cph'} <=> $b->{'cph'} } @results;
 
         $apiToResults{$api}{'All'} = aggregateResults($tdp, @results);
 
@@ -246,21 +249,23 @@ foreach my $gpu (keys %gpuToStats)
         }
 
         $gpuToCpuLoad{$gpu}{$api} = getAverageCpuLoad(@results);
+
+        next; # Skip these for now
         
         # Arecibo: 17my10ab.26379.19699.15.42.58.vlar_2 
         # Greenbank: blc2_2bit_guppi_57403_68833_HIP11048_OFF_0003.27930.831.21.44.85.vlar_1
         my @arecibo = ();
         my @greenbank = ();
 
-        foreach (@results)
+        foreach my $result (@results)
         {
-            if($_->{'taskName'} =~ /^blc/i)
+            if($result->{'taskName'} =~ /^blc/i)
             {
-                push(@greenbank, $_);
+                push(@greenbank, $result);
             }
             else
             {
-                push(@arecibo, $_);
+                push(@arecibo, $result);
             }
         }
 
@@ -291,6 +296,8 @@ foreach my $telescope (@TELESCOPES)
     }
 
     print("\n");
+
+    exit(0);
 }
 
 print("GPU, " . join(", ", @SORTED_API) . "\n");
