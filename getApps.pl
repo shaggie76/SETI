@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 my $MAX_HOSTS = 10000;
-my $BASE_URL = "http://setiathome.berkeley.edu/host_app_versions.php?hostid=";
+my $BASE_URL = "https://setiathome.berkeley.edu/host_app_versions.php?hostid=";
 
 sub CheckHost($)
 {

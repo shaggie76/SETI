@@ -82,7 +82,7 @@ foreach my $hostId (@hostIds)
     my $defaultGpu;
     my $cpuModel;
 
-    my $url = "http://setiathome.berkeley.edu/show_host_detail.php?hostid=$hostId";
+    my $url = "https://setiathome.berkeley.edu/show_host_detail.php?hostid=$hostId";
 
     my $curl;
     open($curl, "curl --silent \"$url\" |") or die;
@@ -174,7 +174,7 @@ foreach my $hostId (@hostIds)
     my %gpuConcurrency; # api -> concurrency
     my %gpuDevices; # api -> device
 
-    my $BASE_URL = "http://setiathome.berkeley.edu";
+    my $BASE_URL = "https://setiathome.berkeley.edu";
 
     for(my $offset = 0; $offset < $MAX_ROWS; $offset += $ROWS_PER_PAGE)
     {

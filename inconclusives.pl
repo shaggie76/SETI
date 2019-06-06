@@ -33,7 +33,7 @@ foreach my $scanHostId (@hostIds)
     my $gpuModel;
     my $cpuModel;
 
-    my $url = "http://setiathome.berkeley.edu/show_host_detail.php?hostid=$scanHostId";
+    my $url = "https://setiathome.berkeley.edu/show_host_detail.php?hostid=$scanHostId";
 
     my $curl;
     open($curl, "curl --silent \"$url\" |") or die;
@@ -95,7 +95,7 @@ foreach my $scanHostId (@hostIds)
     $cpuModel =~ s/\s*$//;
     $cpuModel =~ s/^\s*//;
 
-    my $BASE_URL = "http://setiathome.berkeley.edu";
+    my $BASE_URL = "https://setiathome.berkeley.edu";
 
     my @row;
     my $rows = 0;
@@ -263,8 +263,8 @@ foreach my $scanHostId (@hostIds)
 
         unless(-f $dataFile)
         {
-            # http://setiathome.berkeley.edu/forum_thread.php?id=56536&postid=953939#953939
-            my $DL_BASE_URL = 'http://boinc2.ssl.berkeley.edu/sah/download_fanout';
+            # https://setiathome.berkeley.edu/forum_thread.php?id=56536&postid=953939#953939
+            my $DL_BASE_URL = 'https://boinc2.ssl.berkeley.edu/sah/download_fanout';
             
             my $digest = md5_hex($taskName);
             my $d1 = substr($digest, 5, 1);
